@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#12467E" />
+<title>FreeWheel — Trujillo accesible</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+<style>
+  :root{
+    --accent:#12467E; --accent-2:#1C5DA6;
+    --green:#1F9D57; --amber:#D68910; --red:#D23B3B;
+    --ink:#14202B; --muted:#5A6773; --bg:#F4F6F8; --surface:#FFFFFF;
+    --hair:#E2E7EC; --shadow:0 6px 24px -8px rgba(20,32,43,.35);
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --touch:52px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:var(--sans);color:var(--ink);background:var(--bg)}
+  #map{position:absolute;inset:0}
+  .maplibregl-ctrl-attrib{font-size:10px}
+
+  /* ---- Top bar ---- */
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:5;
+    background:linear-gradient(180deg,rgba(18,70,126,.96),rgba(18,70,126,.90));
+    color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px;
+    box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .brand{display:flex;flex-direction:column;line-height:1.1}
+  .brand b{font-size:17px;letter-spacing:.2px}
+  .brand span{font-size:11.5px;opacity:.85}
+  .count{margin-left:auto;background:rgba(255,255,255,.16);border-radius:999px;
+    padding:6px 12px;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* ---- Legend ---- */
+  .legend{position:absolute;top:64px;right:12px;z-index:4;background:var(--surface);
+    border:1px solid var(--hair);border-radius:12px;box-shadow:var(--shadow);
+    padding:10px 12px;font-size:12.5px;max-width:180px}
+  .legend h4{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .legend .lg{display:flex;align-items:center;gap:8px;margin:5px 0;color:var(--ink)}
+  .legend .dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+
+  /* ---- Pins ---- */
+  .pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+    border:2.5px solid #fff;box-shadow:0 3px 6px rgba(0,0,0,.4);cursor:pointer;
+    display:grid;place-items:center}
+  .pin span{transform:rotate(45deg);font-size:14px;line-height:1}
+  .pin.green{background:var(--green)} .pin.amber{background:var(--amber)} .pin.red{background:var(--red)}
+
+  /* ---- FAB ---- */
+  .fab{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);z-index:6;
+    background:var(--accent);color:#fff;border:none;border-radius:999px;
+    min-height:var(--touch);padding:0 26px 0 20px;font-size:16.5px;font-weight:700;
+    display:flex;align-items:center;gap:10px;box-shadow:var(--shadow);cursor:pointer;
+    font-family:inherit}
+  .fab:active{transform:translateX(-50%) scale(.97)}
+  .fab .plus{font-size:22px;line-height:1;margin-top:-1px}
+
+  /* ---- Placing banner ---- */
+  .placing{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:6;
+    background:var(--ink);color:#fff;padding:11px 18px;border-radius:999px;font-size:14px;
+    font-weight:600;box-shadow:var(--shadow);display:none;align-items:center;gap:12px;max-width:92vw}
+  .placing.show{display:flex}
+  .placing button{background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;
+    width:30px;height:30px;font-size:16px;cursor:pointer;font-family:inherit}
+  .crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3;
+    font-size:34px;color:var(--accent);text-shadow:0 0 4px #fff,0 0 4px #fff;display:none;
+    pointer-events:none}
+  .crosshair.show{display:block}
+
+  /* ---- Sheet ---- */
+  .backdrop{position:absolute;inset:0;background:rgba(20,32,43,.45);z-index:9;display:none}
+  .backdrop.show{display:block}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:10;background:var(--surface);
+    border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25);
+    padding:8px 18px calc(18px + env(safe-area-inset-bottom));transform:translateY(100%);
+    transition:transform .25s ease;max-height:88vh;overflow-y:auto}
+  .sheet.show{transform:translateY(0)}
+  .grabber{width:44px;height:5px;border-radius:3px;background:var(--hair);margin:8px auto 14px}
+  .sheet h3{margin:2px 0 4px;font-size:19px}
+  .sheet .hint{margin:0 0 16px;color:var(--muted);font-size:13.5px}
+  .label{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);
+    margin:16px 0 9px;font-weight:700}
+  .cats{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .cat{display:flex;align-items:center;gap:10px;padding:13px 12px;border:1.5px solid var(--hair);
+    border-radius:13px;background:var(--surface);cursor:pointer;font-size:14px;font-weight:600;
+    text-align:left;font-family:inherit;color:var(--ink);min-height:var(--touch)}
+  .cat .em{font-size:20px}
+  .cat[aria-pressed="true"]{border-color:var(--accent-2);background:#EAF1FA;
+    box-shadow:0 0 0 3px rgba(28,93,166,.15)}
+  .sev{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+  .sevbtn{border:2px solid var(--hair);border-radius:13px;padding:12px 6px;background:var(--surface);
+    cursor:pointer;font-family:inherit;font-weight:700;font-size:13px;color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;gap:7px;min-height:var(--touch)}
+  .sevbtn .cir{width:22px;height:22px;border-radius:50%}
+  .sevbtn.g .cir{background:var(--green)} .sevbtn.a .cir{background:var(--amber)} .sevbtn.r .cir{background:var(--red)}
+  .sevbtn[aria-pressed="true"].g{border-color:var(--green);background:#E9F7EF}
+  .sevbtn[aria-pressed="true"].a{border-color:var(--amber);background:#FCF3E4}
+  .sevbtn[aria-pressed="true"].r{border-color:var(--red);background:#FBEAEA}
+  .noterow{display:flex;gap:8px;align-items:stretch}
+  .noterow textarea{flex:1;border:1.5px solid var(--hair);border-radius:12px;padding:12px;
+    font-family:inherit;font-size:15px;resize:none;min-height:56px;color:var(--ink)}
+  .mic{width:var(--touch);min-width:var(--touch);border:1.5px solid var(--hair);border-radius:12px;
+    background:var(--surface);font-size:22px;cursor:pointer}
+  .mic.rec{background:#FBEAEA;border-color:var(--red);animation:pulse 1s infinite}
+  @keyframes pulse{50%{background:#F6D6D6}}
+  .actions{display:flex;gap:10px;margin-top:20px}
+  .btn{flex:1;min-height:var(--touch);border-radius:13px;border:none;font-size:16px;font-weight:700;
+    cursor:pointer;font-family:inherit}
+  .btn.primary{background:var(--accent);color:#fff} .btn.primary:disabled{opacity:.45}
+  .btn.ghost{background:var(--bg);color:var(--muted);flex:0 0 40%}
+
+  /* ---- Popup ---- */
+  .maplibregl-popup-content{border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);font-family:var(--sans)}
+  .pop b{font-size:15px} .pop .sev-tag{display:inline-block;color:#fff;border-radius:999px;
+    padding:2px 10px;font-size:12px;font-weight:700;margin:6px 0}
+  .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
+  .pop .del{background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;
+    font-family:inherit;font-size:13.5px;padding:0}
+
+  .toast{position:absolute;bottom:96px;left:50%;transform:translateX(-50%);z-index:20;
+    background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:600;
+    box-shadow:var(--shadow);opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
+  .toast.show{opacity:1}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Mapa de accesibilidad de Trujillo"></div>
+
+<header class="topbar">
+  <div class="brand"><b>FreeWheel</b><span>Trujillo accesible · prototipo</span></div>
+  <div class="count" id="count" aria-live="polite">0 reportes</div>
+</header>
+
+<aside class="legend" aria-label="Leyenda">
+  <h4>Estado</h4>
+  <div class="lg"><span class="dot" style="background:var(--green)"></span> Accesible</div>
+  <div class="lg"><span class="dot" style="background:var(--amber)"></span> Con dificultad</div>
+  <div class="lg"><span class="dot" style="background:var(--red)"></span> Bloqueado</div>
+</aside>
+
+<div class="crosshair" id="crosshair" aria-hidden="true">✛</div>
+<div class="placing" id="placing" role="status">
+  <span>Toca en el mapa el lugar exacto</span>
+  <button id="cancelPlace" aria-label="Cancelar">✕</button>
+</div>
+
+<button class="fab" id="fab"><span class="plus">＋</span> Reportar aquí</button>
+
+<div class="backdrop" id="backdrop"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="grabber"></div>
+  <h3 id="sheetTitle">Nuevo reporte</h3>
+  <p class="hint">¿Qué encontraste en este punto?</p>
+
+  <div class="label">Tipo de barrera</div>
+  <div class="cats" id="cats"></div>
+
+  <div class="label">¿Qué tan grave es para una silla de ruedas?</div>
+  <div class="sev">
+    <button class="sevbtn g" data-sev="green" aria-pressed="false"><span class="cir"></span>Accesible</button>
+    <button class="sevbtn a" data-sev="amber" aria-pressed="false"><span class="cir"></span>Con dificultad</button>
+    <button class="sevbtn r" data-sev="red" aria-pressed="false"><span class="cir"></span>Bloqueado</button>
+  </div>
+
+  <div class="label">Nota (opcional)</div>
+  <div class="noterow">
+    <textarea id="note" placeholder="Ej: rampa muy inclinada, se atasca la silla…" aria-label="Nota"></textarea>
+    <button class="mic" id="mic" title="Dictar por voz" aria-label="Dictar por voz">🎤</button>
+  </div>
+
+  <div class="actions">
+    <button class="btn ghost" id="cancelSheet">Cancelar</button>
+    <button class="btn primary" id="save" disabled>Guardar reporte</button>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  var SUPABASE_URL = "https://dslarulabzyufkhipsne.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzbGFydWxhYnp5dWZraGlwc25lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMjg3MjYsImV4cCI6MjA5OTgwNDcyNn0.W94J28dei5Zi-tRsD-M5QrwWRDsTaZxykCx_NDDlXiY";
+  var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Zona piloto de Carlos: Trujillo (Centro ↔ Víctor Larco). Centro histórico como ancla.
+  var CENTER = [-79.0288, -8.1119];
+
+  var CATS = [
+    {id:"rampa",     em:"🛑", label:"Rampa faltante", sev:"red"},
+    {id:"superficie",em:"🕳️", label:"Vereda rota / hoyos", sev:"amber"},
+    {id:"peralte",   em:"↘️", label:"Muy inclinada", sev:"amber"},
+    {id:"obstaculo", em:"🚧", label:"Obstáculo bloquea", sev:"red"},
+    {id:"sinvereda", em:"🚫", label:"Sin vereda", sev:"red"},
+    {id:"accesible", em:"✅", label:"Paso accesible", sev:"green"}
+  ];
+  var SEVLABEL={green:"Accesible",amber:"Con dificultad",red:"Bloqueado"};
+  var SEVHEX={green:"#1F9D57",amber:"#D68910",red:"#D23B3B"};
+
+  // OpenFreeMap: teselas vectoriales gratis, sin API key ni registro, detalle de calle completo.
+  var map = new maplibregl.Map({
+    container:"map",
+    style:"https://tiles.openfreemap.org/styles/bright",
+    center:CENTER, zoom:15
+  });
+  map.addControl(new maplibregl.NavigationControl({showCompass:false}),"bottom-right");
+  map.addControl(new maplibregl.GeolocateControl({positionOptions:{enableHighAccuracy:true},
+    trackUserLocation:true}),"bottom-right");
+
+  // ---- estado ----
+  var reports = [];
+  var markers = [];
+  var placing = false;
+  var draft = null; // {lng,lat,cat,sev}
+
+  var el = function(id){return document.getElementById(id);};
+  var sheet=el("sheet"), backdrop=el("backdrop"), catsBox=el("cats"),
+      saveBtn=el("save"), note=el("note"), placingBar=el("placing"), crosshair=el("crosshair");
+
+  // pintar chips de categoría
+  CATS.forEach(function(c){
+    var b=document.createElement("button");
+    b.className="cat"; b.type="button"; b.setAttribute("aria-pressed","false");
+    b.dataset.cat=c.id;
+    b.innerHTML='<span class="em">'+c.em+'</span> '+c.label;
+    b.addEventListener("click",function(){selectCat(c.id);});
+    catsBox.appendChild(b);
+  });
+
+  function selectCat(id){
+    var c=CATS.filter(function(x){return x.id===id;})[0];
+    draft.cat=id;
+    [].forEach.call(catsBox.children,function(ch){
+      ch.setAttribute("aria-pressed", ch.dataset.cat===id?"true":"false");
+    });
+    if(!draft.sevTouched){ setSev(c.sev, false); } // sugerir severidad por categoría
+    refreshSave();
+  }
+  function setSev(sev, touched){
+    draft.sev=sev; if(touched) draft.sevTouched=true;
+    [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){
+      b.setAttribute("aria-pressed", b.dataset.sev===sev?"true":"false");
+    });
+    refreshSave();
+  }
+  [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){
+    b.addEventListener("click",function(){setSev(b.dataset.sev,true);});
+  });
+  function refreshSave(){ saveBtn.disabled = !(draft && draft.cat && draft.sev); }
+
+  // ---- flujo de colocar ----
+  el("fab").addEventListener("click",startPlacing);
+  el("cancelPlace").addEventListener("click",stopPlacing);
+  function startPlacing(){
+    placing=true; draft={lng:null,lat:null,cat:null,sev:null,sevTouched:false};
+    placingBar.classList.add("show"); crosshair.classList.add("show");
+    map.getCanvas().style.cursor="crosshair";
+  }
+  function stopPlacing(){
+    placing=false; placingBar.classList.remove("show"); crosshair.classList.remove("show");
+    map.getCanvas().style.cursor="";
+  }
+  map.on("click",function(e){
+    if(!placing) return;
+    draft.lng=e.lngLat.lng; draft.lat=e.lngLat.lat;
+    stopPlacing(); openSheet();
+  });
+
+  function openSheet(){
+    // reset UI
+    [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed","false");});
+    [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed","false");});
+    note.value=""; saveBtn.disabled=true;
+    backdrop.classList.add("show"); sheet.classList.add("show");
+    setTimeout(function(){ (catsBox.querySelector(".cat")||sheet).focus(); },260);
+  }
+  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); }
+  el("cancelSheet").addEventListener("click",closeSheet);
+  backdrop.addEventListener("click",closeSheet);
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape"){closeSheet();stopPlacing();} });
+
+  function getNickname(){
+    var n = localStorage.getItem("freewheel_nickname");
+    if(!n){
+      n = (window.prompt("¿Cómo te llamas? (para identificar tus reportes)")||"").trim() || "Anónimo";
+      localStorage.setItem("freewheel_nickname", n);
+    }
+    return n;
+  }
+
+  saveBtn.addEventListener("click",function(){
+    var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
+                    lng:draft.lng, lat:draft.lat, reportero:getNickname()};
+    saveBtn.disabled = true;
+    sb.from("reportes").insert(payload).select().then(function(res){
+      saveBtn.disabled = false;
+      if(res.error || !res.data || !res.data[0]){
+        console.error(res.error); toast("No se pudo guardar — revisa tu conexión");
+        return;
+      }
+      var row = res.data[0];
+      var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
+               note:row.nota||"", ts:row.creado_en};
+      reports.push(r); addMarker(r); closeSheet(); updateCount();
+      toast("Reporte guardado ✓");
+    });
+  });
+
+  // ---- marcadores ----
+  function addMarker(r){
+    var c=CATS.filter(function(x){return x.id===r.cat;})[0]||{em:"📍",label:"Reporte"};
+    var d=document.createElement("div");
+    d.className="pin "+r.sev; d.innerHTML="<span>"+c.em+"</span>";
+    d.setAttribute("role","button");
+    d.setAttribute("aria-label",c.label+", "+SEVLABEL[r.sev]);
+    var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
+      '<div class="pop"><b>'+c.label+'</b><br>'+
+      '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+'">'+SEVLABEL[r.sev]+'</span>'+
+      (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
+      '<button class="del" data-id="'+r.id+'">Eliminar reporte</button></div>'
+    );
+    var m=new maplibregl.Marker({element:d,anchor:"bottom"})
+      .setLngLat([r.lng,r.lat]).setPopup(popup).addTo(map);
+    markers.push({id:r.id,marker:m});
+  }
+  document.addEventListener("click",function(e){
+    if(e.target && e.target.classList.contains("del")){
+      var id=Number(e.target.dataset.id);
+      sb.from("reportes").delete().eq("id", id).select().then(function(res){
+        if(res.error || !res.data || res.data.length===0){
+          console.error(res.error); toast("No se pudo eliminar todavía");
+          return;
+        }
+        reports=reports.filter(function(x){return x.id!==id;});
+        var mk=markers.filter(function(x){return x.id===id;})[0];
+        if(mk){mk.marker.remove(); markers=markers.filter(function(x){return x.id!==id;});}
+        updateCount(); toast("Reporte eliminado");
+      });
+    }
+  });
+
+  // ---- voz (Carlos: manos limitadas) ----
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var mic=el("mic"), rec=null;
+  if(!SR){ mic.style.display="none"; }
+  else{
+    rec=new SR(); rec.lang="es-PE"; rec.interimResults=false;
+    rec.onresult=function(ev){ note.value=(note.value?note.value+" ":"")+ev.results[0][0].transcript; };
+    rec.onend=function(){ mic.classList.remove("rec"); };
+    mic.addEventListener("click",function(){
+      try{ if(mic.classList.contains("rec")){rec.stop();} else {mic.classList.add("rec"); rec.start();} }
+      catch(err){ mic.classList.remove("rec"); }
+    });
+  }
+
+  // ---- util ----
+  function updateCount(){ el("count").textContent=reports.length+(reports.length===1?" reporte":" reportes"); }
+  function toast(msg){ var t=el("toast"); t.textContent=msg; t.classList.add("show");
+    setTimeout(function(){t.classList.remove("show");},1800); }
+  function escapeHtml(s){ return s.replace(/[&<>"]/g,function(c){
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  function loadReports(){
+    sb.from("reportes").select("*").order("creado_en",{ascending:true}).then(function(res){
+      if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
+      reports = res.data.map(function(row){
+        return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
+                note:row.nota||"", ts:row.creado_en};
+      });
+      reports.forEach(addMarker);
+      updateCount();
+    });
+  }
+
+  function subscribeRealtime(){
+    sb.channel("reportes-changes")
+      .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
+        var row=payload.new;
+        if(reports.some(function(x){return x.id===row.id;})) return;
+        var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
+               note:row.nota||"", ts:row.creado_en};
+        reports.push(r); addMarker(r); updateCount();
+        toast("Nuevo reporte de "+(row.reportero||"alguien"));
+      })
+      .on("postgres_changes",{event:"DELETE",schema:"public",table:"reportes"},function(payload){
+        var id=payload.old.id;
+        reports=reports.filter(function(x){return x.id!==id;});
+        var mk=markers.filter(function(x){return x.id===id;})[0];
+        if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==id;}); }
+        updateCount();
+      })
+      .subscribe();
+  }
+
+  map.on("load", loadReports);
+  subscribeRealtime();
+})();
+</script>
+</body>
+</html>
