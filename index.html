@@ -111,8 +111,9 @@
 
   /* ---- Popup ---- */
   .maplibregl-popup-content{border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);font-family:var(--sans)}
-  .pop b{font-size:15px} .pop .sev-tag{display:inline-block;color:#fff;border-radius:999px;
+  .pop b{font-size:15px} .pop .sev-tag{display:inline-block;border-radius:999px;
     padding:2px 10px;font-size:12px;font-weight:700;margin:6px 0}
+  .pop .by{color:var(--muted);font-size:12px;margin:2px 0 6px}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
   .pop .del{background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;
     font-family:inherit;font-size:13.5px;padding:0}
@@ -306,7 +307,7 @@
       }
       var row = res.data[0];
       var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
       addReportIfNew(r); closeSheet(); updateCount();
       toast("Reporte guardado ✓");
     });
@@ -326,6 +327,7 @@
     var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
       '<div class="pop"><b>'+c.label+'</b><br>'+
       '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVLABEL[r.sev]+'</span>'+
+      '<div class="by">Reportado por '+escapeHtml(r.reportero||"alguien")+'</div>'+
       (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
       '<button class="del" data-id="'+r.id+'">Eliminar reporte</button></div>'
     );
@@ -383,7 +385,7 @@
       if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
       reports = res.data.map(function(row){
         return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-                note:row.nota||"", ts:row.creado_en};
+                note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
       });
       reports.forEach(addMarker);
       updateCount();
@@ -395,7 +397,7 @@
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
         var row=payload.new;
         var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
         if(!addReportIfNew(r)) return;
         updateCount();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
