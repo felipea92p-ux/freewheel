@@ -4,6 +4,17 @@
 > Esfuerzo aproximado: **Rápido** (<1h) · **Medio** (~medio día) · **Grande** (1+ día).
 > El orden dentro de cada sección es por impacto (lo de arriba pesa más).
 
+## ✅ Ya resuelto (2026-07-17, mismo día)
+- Bug #7 — se habilitó el zoom de la página (accesibilidad).
+- Bug #5 — el apodo ahora es un campo editable en la hoja (adiós al pop-up que dejaba "Anónimo").
+- Mejora #1 — botón "Usar mi ubicación" para el origen de la ruta (GPS).
+- Mejora #4 — la foto del popup se amplía al tocarla (abre en pestaña nueva).
+- Mejora #5 — el popup muestra "hace X días".
+- Mejora #8 — copy de ruta: "en silla de ruedas" en vez de "caminando".
+- Mejora #10 — se puede elegir foto de la galería (antes forzaba la cámara).
+
+**Pendiente lo demás de abajo.** Lo más importante que sigue abierto: los bugs #1 y #2 (botón Eliminar + moderación, necesitan tu decisión) y las ideas #1 (PWA) y #2 (Fase 2).
+
 ---
 
 ## 1) 🐛 BUGS / cosas frágiles o incorrectas
