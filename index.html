@@ -28,6 +28,8 @@
     background:linear-gradient(180deg,rgba(74,68,160,.97),rgba(74,68,160,.90));
     color:#fff;padding:10px 14px;display:flex;align-items:center;gap:12px;
     box-shadow:0 2px 10px rgba(0,0,0,.15)}
+  .logo{width:38px;height:38px;flex-shrink:0;border-radius:12px;background:rgba(255,255,255,.18);
+    display:grid;place-items:center;font-size:21px;line-height:1}
   .brand{display:flex;flex-direction:column;line-height:1.15}
   .brand b{font-size:18px;letter-spacing:.2px}
   .brand span{font-size:12.5px;opacity:.9}
@@ -42,14 +44,14 @@
     border-radius:14px;box-shadow:var(--shadow);padding:14px;display:none}
   .routepanel.show{display:block}
   .routerow{display:flex;gap:8px;margin-bottom:8px}
-  .acwrap{flex:1;min-width:0;position:relative}
-  .acwrap input{width:100%;border:1.5px solid var(--hair);border-radius:10px;padding:11px 12px;
+  .routerow input{flex:1;min-width:0;border:1.5px solid var(--hair);border-radius:10px;padding:11px 12px;
     font-family:inherit;font-size:14px;color:var(--ink)}
-  .aclist{list-style:none;margin:4px 0 0;padding:4px;position:absolute;left:0;right:0;top:100%;z-index:8;
+  /* La lista va en el flujo (empuja el contenido hacia abajo), nunca tapa el botón */
+  .aclist{list-style:none;margin:-2px 0 8px;padding:4px;
     background:var(--surface);border:1px solid var(--hair);border-radius:10px;box-shadow:var(--shadow);
-    max-height:210px;overflow-y:auto;display:none}
+    max-height:230px;overflow-y:auto;display:none}
   .aclist.show{display:block}
-  .aclist li{padding:10px 10px;border-radius:8px;font-size:13.5px;color:var(--ink);cursor:pointer;
+  .aclist li{padding:11px 11px;border-radius:8px;font-size:13.5px;color:var(--ink);cursor:pointer;
     line-height:1.3}
   .aclist li .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
   .aclist li[aria-selected="true"],.aclist li:hover{background:#ECEBF7}
@@ -167,28 +169,25 @@
 <div id="map" role="application" aria-label="Mapa de accesibilidad de Trujillo"></div>
 
 <header class="topbar">
-  <div class="brand"><b>FreeWheel</b><span>Trujillo accesible · prototipo</span></div>
+  <div class="logo" aria-hidden="true">♿</div>
+  <div class="brand"><b>FreeWheel</b><span>Trujillo accesible · en comunidad</span></div>
   <div class="count" id="count" aria-live="polite">0 reportes</div>
   <button class="routebtn" id="routeBtn" aria-label="Buscar ruta accesible" aria-pressed="false">🧭</button>
 </header>
 
 <div class="routepanel" id="routePanel" role="region" aria-label="Buscar ruta">
   <div class="routerow">
-    <div class="acwrap">
-      <input type="text" id="routeFrom" placeholder="Desde (dirección)" aria-label="Origen"
-             autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acFrom" aria-autocomplete="list">
-      <ul class="aclist" id="acFrom" role="listbox"></ul>
-    </div>
+    <input type="text" id="routeFrom" placeholder="Desde (dirección)" aria-label="Origen"
+           autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acFrom" aria-autocomplete="list">
     <button class="pickbtn" id="pickFrom" type="button" aria-label="Elegir origen en el mapa" aria-pressed="false">📍</button>
   </div>
+  <ul class="aclist" id="acFrom" role="listbox"></ul>
   <div class="routerow">
-    <div class="acwrap">
-      <input type="text" id="routeTo" placeholder="Hasta (dirección)" aria-label="Destino"
-             autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acTo" aria-autocomplete="list">
-      <ul class="aclist" id="acTo" role="listbox"></ul>
-    </div>
+    <input type="text" id="routeTo" placeholder="Hasta (dirección)" aria-label="Destino"
+           autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acTo" aria-autocomplete="list">
     <button class="pickbtn" id="pickTo" type="button" aria-label="Elegir destino en el mapa" aria-pressed="false">📍</button>
   </div>
+  <ul class="aclist" id="acTo" role="listbox"></ul>
   <div class="routeactions">
     <button class="btn ghost" id="routeClear" type="button">Limpiar</button>
     <button class="btn primary" id="routeGo" type="button">Buscar ruta</button>
