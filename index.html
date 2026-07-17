@@ -166,7 +166,7 @@
   <div class="label">Nota (opcional)</div>
   <div class="noterow">
     <textarea id="note" placeholder="Ej: rampa muy inclinada, se atasca la silla…" aria-label="Nota"></textarea>
-    <button class="mic" id="mic" title="Dictar por voz" aria-label="Dictar por voz">🎤</button>
+    <button class="mic" id="mic" title="Dictar por voz" aria-label="Dictar por voz" aria-pressed="false">🎤</button>
   </div>
 
   <div class="actions">
@@ -277,7 +277,7 @@
     backdrop.classList.add("show"); sheet.classList.add("show");
     setTimeout(function(){ (catsBox.querySelector(".cat")||sheet).focus(); },260);
   }
-  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); }
+  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); el("fab").focus(); }
   el("cancelSheet").addEventListener("click",closeSheet);
   backdrop.addEventListener("click",closeSheet);
   document.addEventListener("keydown",function(e){ if(e.key==="Escape"){closeSheet();stopPlacing();} });
@@ -304,12 +304,16 @@
       var row = res.data[0];
       var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
                note:row.nota||"", ts:row.creado_en};
-      reports.push(r); addMarker(r); closeSheet(); updateCount();
+      addReportIfNew(r); closeSheet(); updateCount();
       toast("Reporte guardado ✓");
     });
   });
 
   // ---- marcadores ----
+  function addReportIfNew(r){
+    if(reports.some(function(x){return x.id===r.id;})) return false;
+    reports.push(r); addMarker(r); return true;
+  }
   function addMarker(r){
     var c=CATS.filter(function(x){return x.id===r.cat;})[0]||{em:"📍",label:"Reporte"};
     var d=document.createElement("div");
@@ -349,10 +353,17 @@
   else{
     rec=new SR(); rec.lang="es-PE"; rec.interimResults=false;
     rec.onresult=function(ev){ note.value=(note.value?note.value+" ":"")+ev.results[0][0].transcript; };
-    rec.onend=function(){ mic.classList.remove("rec"); };
+    rec.onend=function(){ mic.classList.remove("rec"); mic.setAttribute("aria-pressed","false"); };
+    rec.onerror=function(ev){
+      var msg = ev.error==="not-allowed" ? "Permiso de micrófono denegado" : "No se pudo escuchar, intenta de nuevo";
+      toast(msg);
+    };
     mic.addEventListener("click",function(){
-      try{ if(mic.classList.contains("rec")){rec.stop();} else {mic.classList.add("rec"); rec.start();} }
-      catch(err){ mic.classList.remove("rec"); }
+      try{
+        if(mic.classList.contains("rec")){ rec.stop(); }
+        else { mic.classList.add("rec"); mic.setAttribute("aria-pressed","true"); rec.start(); }
+      }
+      catch(err){ mic.classList.remove("rec"); mic.setAttribute("aria-pressed","false"); }
     });
   }
 
@@ -364,7 +375,7 @@
     return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
   function loadReports(){
-    sb.from("reportes").select("*").order("creado_en",{ascending:true}).then(function(res){
+    return sb.from("reportes").select("*").order("creado_en",{ascending:true}).then(function(res){
       if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
       reports = res.data.map(function(row){
         return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
@@ -379,10 +390,10 @@
     sb.channel("reportes-changes")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
         var row=payload.new;
-        if(reports.some(function(x){return x.id===row.id;})) return;
         var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
                note:row.nota||"", ts:row.creado_en};
-        reports.push(r); addMarker(r); updateCount();
+        if(!addReportIfNew(r)) return;
+        updateCount();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
       })
       .on("postgres_changes",{event:"DELETE",schema:"public",table:"reportes"},function(payload){
@@ -395,8 +406,7 @@
       .subscribe();
   }
 
-  map.on("load", loadReports);
-  subscribeRealtime();
+  map.on("load", function(){ loadReports().then(subscribeRealtime); });
 })();
 </script>
 </body>
