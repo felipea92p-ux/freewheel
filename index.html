@@ -267,6 +267,20 @@
   var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   var ORS_API_KEY = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjQ4ZTA2OWIwOTRhMzQ4ZDlhNDM2ZTk1OTExOGQ1ZmFkIiwiaCI6Im11cm11cjY0In0=";
 
+  // ---- identidad silenciosa (Fase 1) ----
+  // Cada dispositivo obtiene una cuenta anónima persistente. Esto es lo que permite
+  // que cada quien borre/edite solo lo suyo (verificado por el servidor con RLS).
+  // Si el toggle "Anonymous sign-ins" aún no está activo, degrada con gracia: sigue
+  // funcionando como antes (sin sesión) hasta que se active.
+  var myUid = null;
+  var sessionReady = sb.auth.getSession().then(function(res){
+    if(res.data && res.data.session){ myUid = res.data.session.user.id; return; }
+    return sb.auth.signInAnonymously().then(function(r){
+      if(r.error){ console.warn("Sesión anónima no disponible todavía:", r.error.message); return; }
+      myUid = r.data.session.user.id;
+    });
+  }).catch(function(e){ console.warn("Auth:", e && e.message); });
+
   // Trujillo es el ancla del mapa y el centro de referencia de la búsqueda
   // (los resultados cercanos a Trujillo salen primero), pero se busca en todo el país.
   var CENTER = [-79.0288, -8.1119];
@@ -447,7 +461,9 @@
 
   saveBtn.addEventListener("click",function(){
     saveBtn.disabled = true;
-    uploadPhotoIfAny().then(function(fotoUrl){
+    sessionReady.then(uploadPhotoIfAny).then(function(fotoUrl){
+      // No mandamos user_id: la base lo llena sola con la sesión actual (default auth.uid()).
+      // Así funciona igual antes y después del esquema, sin orden frágil.
       var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
                       lng:draft.lng, lat:draft.lat, reportero:getNickname(), foto_url:fotoUrl};
       return sb.from("reportes").insert(payload).select();
@@ -459,7 +475,8 @@
       }
       var row = res.data[0];
       var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
+               user_id:row.user_id, ts:row.creado_en};
       addReportIfNew(r); closeSheet(); updateCount();
       toast("Reporte guardado ✓");
     }).catch(function(err){
@@ -554,7 +571,8 @@
       if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
       reports = res.data.map(function(row){
         return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-                note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
+                note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
+                user_id:row.user_id, ts:row.creado_en};
       });
       reports.forEach(addMarker);
       updateCount();
@@ -566,7 +584,8 @@
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
         var row=payload.new;
         var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
+               user_id:row.user_id, ts:row.creado_en};
         if(!addReportIfNew(r)) return;
         updateCount();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
