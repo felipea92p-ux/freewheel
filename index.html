@@ -39,8 +39,17 @@
     border-radius:14px;box-shadow:var(--shadow);padding:14px;display:none}
   .routepanel.show{display:block}
   .routerow{display:flex;gap:8px;margin-bottom:8px}
-  .routerow input{flex:1;min-width:0;border:1.5px solid var(--hair);border-radius:10px;padding:11px 12px;
+  .acwrap{flex:1;min-width:0;position:relative}
+  .acwrap input{width:100%;border:1.5px solid var(--hair);border-radius:10px;padding:11px 12px;
     font-family:inherit;font-size:14px;color:var(--ink)}
+  .aclist{list-style:none;margin:4px 0 0;padding:4px;position:absolute;left:0;right:0;top:100%;z-index:8;
+    background:var(--surface);border:1px solid var(--hair);border-radius:10px;box-shadow:var(--shadow);
+    max-height:210px;overflow-y:auto;display:none}
+  .aclist.show{display:block}
+  .aclist li{padding:10px 10px;border-radius:8px;font-size:13.5px;color:var(--ink);cursor:pointer;
+    line-height:1.3}
+  .aclist li .sub{display:block;font-size:11.5px;color:var(--muted);margin-top:1px}
+  .aclist li[aria-selected="true"],.aclist li:hover{background:#EAF1FA}
   .pickbtn{flex-shrink:0;width:44px;min-height:44px;border:1.5px solid var(--hair);border-radius:10px;
     background:var(--surface);font-size:18px;cursor:pointer;font-family:inherit}
   .pickbtn[aria-pressed="true"]{border-color:var(--accent-2);background:#EAF1FA}
@@ -162,11 +171,19 @@
 
 <div class="routepanel" id="routePanel" role="region" aria-label="Buscar ruta">
   <div class="routerow">
-    <input type="text" id="routeFrom" placeholder="Desde (dirección)" aria-label="Origen">
+    <div class="acwrap">
+      <input type="text" id="routeFrom" placeholder="Desde (dirección)" aria-label="Origen"
+             autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acFrom" aria-autocomplete="list">
+      <ul class="aclist" id="acFrom" role="listbox"></ul>
+    </div>
     <button class="pickbtn" id="pickFrom" type="button" aria-label="Elegir origen en el mapa" aria-pressed="false">📍</button>
   </div>
   <div class="routerow">
-    <input type="text" id="routeTo" placeholder="Hasta (dirección)" aria-label="Destino">
+    <div class="acwrap">
+      <input type="text" id="routeTo" placeholder="Hasta (dirección)" aria-label="Destino"
+             autocomplete="off" role="combobox" aria-expanded="false" aria-controls="acTo" aria-autocomplete="list">
+      <ul class="aclist" id="acTo" role="listbox"></ul>
+    </div>
     <button class="pickbtn" id="pickTo" type="button" aria-label="Elegir destino en el mapa" aria-pressed="false">📍</button>
   </div>
   <div class="routeactions">
@@ -544,20 +561,30 @@
   // ---- ruta accesible (OpenRouteService, perfil silla de ruedas) ----
   var routeBtn=el("routeBtn"), routePanel=el("routePanel"), routeFrom=el("routeFrom"),
       routeTo=el("routeTo"), routeGo=el("routeGo"), routeClear=el("routeClear"), routeInfo=el("routeInfo"),
-      pickFrom=el("pickFrom"), pickTo=el("pickTo");
+      pickFrom=el("pickFrom"), pickTo=el("pickTo"), acFrom=el("acFrom"), acTo=el("acTo");
   var routeMarkers = [];
+  var userLoc = null;           // [lng,lat] real del usuario, si dio permiso
+  var geoRequested = false;     // pedir ubicación una sola vez, al abrir el panel
+
+  function requestUserLoc(){
+    if(geoRequested || !navigator.geolocation) return;
+    geoRequested = true;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      userLoc = [pos.coords.longitude, pos.coords.latitude];
+    }, function(){ /* permiso negado o sin señal: seguimos con CENTER */ },
+    {enableHighAccuracy:false, timeout:8000, maximumAge:300000});
+  }
 
   routeBtn.addEventListener("click", function(){
     var show = !routePanel.classList.contains("show");
     routePanel.classList.toggle("show", show);
     routeBtn.setAttribute("aria-pressed", show ? "true" : "false");
+    if(show) requestUserLoc();
     if(!show && (pickMode==="from" || pickMode==="to")) stopPicking();
   });
 
   pickFrom.addEventListener("click", function(){ pickMode==="from" ? stopPicking() : startPicking("from"); });
   pickTo.addEventListener("click", function(){ pickMode==="to" ? stopPicking() : startPicking("to"); });
-  routeFrom.addEventListener("input", function(){ routePicked.from = null; });
-  routeTo.addEventListener("input", function(){ routePicked.to = null; });
 
   function resolvePoint(which){
     if(routePicked[which]) return Promise.resolve({coords:routePicked[which], approx:false});
@@ -565,6 +592,78 @@
     if(!text) return Promise.reject(new Error("Escribe una dirección o elige el punto con 📍 en el mapa."));
     return geocode(text);
   }
+
+  // ---- autocompletado de direcciones ----
+  function fetchSuggestions(text){
+    var focus = userLoc || CENTER;
+    var url = "https://api.openrouteservice.org/geocode/autocomplete?api_key="+encodeURIComponent(ORS_API_KEY)
+      +"&text="+encodeURIComponent(text)
+      +"&focus.point.lon="+focus[0]+"&focus.point.lat="+focus[1]
+      +"&boundary.country=PE&size=5";
+    return fetch(url).then(function(r){ return r.json(); }).then(function(data){
+      return (data.features||[]).map(function(f){
+        var p=f.properties;
+        var sub=[p.locality,p.region].filter(Boolean).join(", ");
+        return {name:p.name||p.label, sub:sub, coords:f.geometry.coordinates};
+      });
+    });
+  }
+
+  function setupAutocomplete(input, list, which){
+    var items=[], sel=-1, timer=null;
+
+    function close(){
+      list.classList.remove("show"); list.innerHTML=""; items=[]; sel=-1;
+      input.setAttribute("aria-expanded","false");
+    }
+    function choose(i){
+      var it=items[i]; if(!it) return;
+      input.value=it.name;
+      routePicked[which]=it.coords;   // coordenada exacta: no re-geocodificar
+      close();
+    }
+    function highlight(){
+      [].forEach.call(list.children,function(li,i){
+        li.setAttribute("aria-selected", i===sel ? "true":"false");
+      });
+    }
+    function render(results){
+      items=results;
+      if(!results.length){ close(); return; }
+      list.innerHTML="";
+      results.forEach(function(it,i){
+        var li=document.createElement("li");
+        li.setAttribute("role","option"); li.setAttribute("aria-selected","false");
+        li.innerHTML = escapeHtml(it.name) + (it.sub?'<span class="sub">'+escapeHtml(it.sub)+'</span>':'');
+        li.addEventListener("mousedown",function(e){ e.preventDefault(); choose(i); });
+        list.appendChild(li);
+      });
+      sel=-1; list.classList.add("show"); input.setAttribute("aria-expanded","true");
+    }
+
+    input.addEventListener("input",function(){
+      routePicked[which]=null;      // al escribir, invalida la coordenada elegida antes
+      var text=input.value.trim();
+      clearTimeout(timer);
+      if(text.length<3){ close(); return; }
+      timer=setTimeout(function(){
+        fetchSuggestions(text).then(render).catch(function(){ close(); });
+      },300);
+    });
+
+    input.addEventListener("keydown",function(e){
+      if(!list.classList.contains("show")) return;
+      if(e.key==="ArrowDown"){ e.preventDefault(); sel=Math.min(sel+1,items.length-1); highlight(); }
+      else if(e.key==="ArrowUp"){ e.preventDefault(); sel=Math.max(sel-1,0); highlight(); }
+      else if(e.key==="Enter"){ if(sel>=0){ e.preventDefault(); choose(sel); } }
+      else if(e.key==="Escape"){ close(); }
+    });
+
+    input.addEventListener("blur",function(){ setTimeout(close,120); });
+    return {close:close};
+  }
+  var acFromCtl=setupAutocomplete(routeFrom, acFrom, "from");
+  var acToCtl=setupAutocomplete(routeTo, acTo, "to");
 
   function geocode(text){
     // Caja alrededor de Trujillo: evita que direcciones sin coincidencia exacta
@@ -609,7 +708,7 @@
 
   function clearRoute(){
     routeFrom.value=""; routeTo.value=""; routeInfo.textContent=""; routeInfo.className="routeinfo";
-    routePicked.from=null; routePicked.to=null;
+    routePicked.from=null; routePicked.to=null; acFromCtl.close(); acToCtl.close();
     routeMarkers.forEach(function(m){ m.remove(); }); routeMarkers=[];
     var src = map.getSource("route");
     if(src) src.setData({type:"FeatureCollection", features:[]});
