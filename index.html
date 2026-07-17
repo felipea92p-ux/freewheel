@@ -258,6 +258,10 @@
 
   // Zona piloto de Carlos: Trujillo (Centro ↔ Víctor Larco). Centro histórico como ancla.
   var CENTER = [-79.0288, -8.1119];
+  // Una sola definición de "la zona de Trujillo", usada por autocompletado, búsqueda y ruteo
+  // para que las tres coincidan. Fuera de esta caja, no se sugiere ni se busca nada.
+  var TRU_BBOX = "&boundary.rect.min_lon=-79.10&boundary.rect.min_lat=-8.20"
+               + "&boundary.rect.max_lon=-78.95&boundary.rect.max_lat=-8.05";
 
   var CATS = [
     {id:"rampa",     em:"🛑", label:"Rampa faltante", sev:"red"},
@@ -563,23 +567,11 @@
       routeTo=el("routeTo"), routeGo=el("routeGo"), routeClear=el("routeClear"), routeInfo=el("routeInfo"),
       pickFrom=el("pickFrom"), pickTo=el("pickTo"), acFrom=el("acFrom"), acTo=el("acTo");
   var routeMarkers = [];
-  var userLoc = null;           // [lng,lat] real del usuario, si dio permiso
-  var geoRequested = false;     // pedir ubicación una sola vez, al abrir el panel
-
-  function requestUserLoc(){
-    if(geoRequested || !navigator.geolocation) return;
-    geoRequested = true;
-    navigator.geolocation.getCurrentPosition(function(pos){
-      userLoc = [pos.coords.longitude, pos.coords.latitude];
-    }, function(){ /* permiso negado o sin señal: seguimos con CENTER */ },
-    {enableHighAccuracy:false, timeout:8000, maximumAge:300000});
-  }
 
   routeBtn.addEventListener("click", function(){
     var show = !routePanel.classList.contains("show");
     routePanel.classList.toggle("show", show);
     routeBtn.setAttribute("aria-pressed", show ? "true" : "false");
-    if(show) requestUserLoc();
     if(!show && (pickMode==="from" || pickMode==="to")) stopPicking();
   });
 
@@ -593,13 +585,12 @@
     return geocode(text);
   }
 
-  // ---- autocompletado de direcciones ----
+  // ---- autocompletado de direcciones (solo zona de Trujillo) ----
   function fetchSuggestions(text){
-    var focus = userLoc || CENTER;
     var url = "https://api.openrouteservice.org/geocode/autocomplete?api_key="+encodeURIComponent(ORS_API_KEY)
       +"&text="+encodeURIComponent(text)
-      +"&focus.point.lon="+focus[0]+"&focus.point.lat="+focus[1]
-      +"&boundary.country=PE&size=5";
+      +"&focus.point.lon="+CENTER[0]+"&focus.point.lat="+CENTER[1]
+      +TRU_BBOX+"&size=5";
     return fetch(url).then(function(r){ return r.json(); }).then(function(data){
       return (data.features||[]).map(function(f){
         var p=f.properties;
@@ -666,13 +657,12 @@
   var acToCtl=setupAutocomplete(routeTo, acTo, "to");
 
   function geocode(text){
-    // Caja alrededor de Trujillo: evita que direcciones sin coincidencia exacta
-    // caigan en otra ciudad (ej. Lima) en vez de fallar o avisar.
+    // Misma caja de Trujillo (TRU_BBOX) que el autocompletado: evita que direcciones
+    // sin coincidencia exacta caigan en otra ciudad (ej. Lima) en vez de fallar o avisar.
     var url = "https://api.openrouteservice.org/geocode/search?api_key="+encodeURIComponent(ORS_API_KEY)
       +"&text="+encodeURIComponent(text)
       +"&focus.point.lon="+CENTER[0]+"&focus.point.lat="+CENTER[1]
-      +"&boundary.rect.min_lon=-79.10&boundary.rect.min_lat=-8.20"
-      +"&boundary.rect.max_lon=-78.95&boundary.rect.max_lat=-8.05&size=1";
+      +TRU_BBOX+"&size=1";
     return fetch(url).then(function(r){ return r.json(); }).then(function(data){
       var f = data.features && data.features[0];
       if(!f) throw new Error("No se encontró la dirección: “"+text+"”");
