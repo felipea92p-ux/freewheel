@@ -51,4 +51,25 @@ drop policy if exists "insertar todos" on public.reportes;
 create policy "leer todos"     on public.reportes for select using (true);
 create policy "insertar todos" on public.reportes for insert with check (true);
 
+-- ============================================================
+--  Agregado después: fotos por reporte
+-- ============================================================
+
+-- 7) Columna para guardar la URL pública de la foto (opcional)
+alter table public.reportes add column if not exists foto_url text;
+
+-- 8) Bucket de Storage público para las fotos, mismo modelo de
+--    confianza abierta que ya tiene la tabla reportes.
+insert into storage.buckets (id, name, public)
+values ('reportes-fotos', 'reportes-fotos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "leer fotos" on storage.objects;
+drop policy if exists "subir fotos" on storage.objects;
+
+create policy "leer fotos"  on storage.objects for select
+  using (bucket_id = 'reportes-fotos');
+create policy "subir fotos" on storage.objects for insert
+  with check (bucket_id = 'reportes-fotos');
+
 -- Listo. La app se conecta con tu Project URL + la clave "anon public".

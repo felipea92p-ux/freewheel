@@ -103,6 +103,13 @@
     background:var(--surface);font-size:22px;cursor:pointer}
   .mic.rec{background:#FBEAEA;border-color:var(--red);animation:pulse 1s infinite}
   @keyframes pulse{50%{background:#F6D6D6}}
+  .photobtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    min-height:var(--touch);border:1.5px dashed var(--hair);border-radius:12px;background:var(--surface);
+    color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer}
+  .photopreview{position:relative;display:inline-block;margin-top:2px}
+  .photopreview img{max-width:100%;max-height:160px;border-radius:12px;display:block}
+  .photoremove{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;
+    border:none;background:rgba(20,32,43,.65);color:#fff;font-size:14px;cursor:pointer;font-family:inherit}
   .actions{display:flex;gap:10px;margin-top:20px}
   .btn{flex:1;min-height:var(--touch);border-radius:13px;border:none;font-size:16px;font-weight:700;
     cursor:pointer;font-family:inherit}
@@ -114,6 +121,7 @@
   .pop b{font-size:15px} .pop .sev-tag{display:inline-block;border-radius:999px;
     padding:2px 10px;font-size:12px;font-weight:700;margin:6px 0}
   .pop .by{color:var(--muted);font-size:12px;margin:2px 0 6px}
+  .pop .popimg{display:block;max-width:100%;max-height:160px;border-radius:10px;margin:4px 0}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
   .pop .del{background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;
     font-family:inherit;font-size:13.5px;padding:0}
@@ -170,6 +178,14 @@
     <button class="mic" id="mic" title="Dictar por voz" aria-label="Dictar por voz" aria-pressed="false">🎤</button>
   </div>
 
+  <div class="label">Foto (opcional)</div>
+  <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none">
+  <button class="photobtn" id="photoBtn" type="button">📷 Agregar foto</button>
+  <div class="photopreview" id="photoPreview" style="display:none">
+    <img id="photoImg" alt="Vista previa de la foto">
+    <button class="photoremove" id="photoRemove" type="button" aria-label="Quitar foto">✕</button>
+  </div>
+
   <div class="actions">
     <button class="btn ghost" id="cancelSheet">Cancelar</button>
     <button class="btn primary" id="save" disabled>Guardar reporte</button>
@@ -223,6 +239,9 @@
   var el = function(id){return document.getElementById(id);};
   var sheet=el("sheet"), backdrop=el("backdrop"), catsBox=el("cats"),
       saveBtn=el("save"), note=el("note"), placingBar=el("placing"), crosshair=el("crosshair");
+  var photoInput=el("photoInput"), photoBtn=el("photoBtn"),
+      photoPreview=el("photoPreview"), photoImg=el("photoImg"), photoRemove=el("photoRemove");
+  var photoFile = null; // File elegido en el picker, pendiente de comprimir y subir al guardar
 
   // pintar chips de categoría
   CATS.forEach(function(c){
@@ -273,11 +292,26 @@
     stopPlacing(); openSheet();
   });
 
+  function resetPhoto(){
+    photoFile = null; photoInput.value = "";
+    photoImg.src = ""; photoPreview.style.display = "none"; photoBtn.style.display = "flex";
+  }
+  photoBtn.addEventListener("click", function(){ photoInput.click(); });
+  photoInput.addEventListener("change", function(){
+    var f = photoInput.files && photoInput.files[0];
+    if(!f) return;
+    photoFile = f;
+    photoImg.src = URL.createObjectURL(f);
+    photoBtn.style.display = "none";
+    photoPreview.style.display = "inline-block";
+  });
+  photoRemove.addEventListener("click", resetPhoto);
+
   function openSheet(){
     // reset UI
     [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed","false");});
     [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed","false");});
-    note.value=""; saveBtn.disabled=true;
+    note.value=""; saveBtn.disabled=true; resetPhoto();
     backdrop.classList.add("show"); sheet.classList.add("show");
     setTimeout(function(){ (catsBox.querySelector(".cat")||sheet).focus(); },260);
   }
@@ -289,17 +323,55 @@
   function getNickname(){
     var n = localStorage.getItem("freewheel_nickname");
     if(!n){
-      n = (window.prompt("¿Cómo te llamas? (para identificar tus reportes)")||"").trim() || "Anónimo";
+      try{ n = (window.prompt("¿Cómo te llamas? (para identificar tus reportes)")||"").trim(); }
+      catch(err){ n = ""; } // navegadores in-app (Instagram, WhatsApp, etc.) bloquean prompt()
+      n = n || "Anónimo";
       localStorage.setItem("freewheel_nickname", n);
     }
     return n;
   }
 
+  function compressImage(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        URL.revokeObjectURL(url);
+        var maxDim = 1280, w = img.width, h = img.height;
+        if(w > maxDim || h > maxDim){
+          if(w > h){ h = Math.round(h * maxDim / w); w = maxDim; }
+          else { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        var canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        canvas.toBlob(function(blob){
+          if(blob) resolve(blob); else reject(new Error("No se pudo procesar la imagen"));
+        }, "image/jpeg", 0.7);
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen")); };
+      img.src = url;
+    });
+  }
+
+  function uploadPhotoIfAny(){
+    if(!photoFile) return Promise.resolve(null);
+    return compressImage(photoFile).then(function(blob){
+      var path = Date.now()+"-"+Math.random().toString(36).slice(2)+".jpg";
+      return sb.storage.from("reportes-fotos").upload(path, blob, {contentType:"image/jpeg"});
+    }).then(function(res){
+      if(res.error) throw res.error;
+      return sb.storage.from("reportes-fotos").getPublicUrl(res.data.path).data.publicUrl;
+    });
+  }
+
   saveBtn.addEventListener("click",function(){
-    var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
-                    lng:draft.lng, lat:draft.lat, reportero:getNickname()};
     saveBtn.disabled = true;
-    sb.from("reportes").insert(payload).select().then(function(res){
+    uploadPhotoIfAny().then(function(fotoUrl){
+      var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
+                      lng:draft.lng, lat:draft.lat, reportero:getNickname(), foto_url:fotoUrl};
+      return sb.from("reportes").insert(payload).select();
+    }).then(function(res){
       saveBtn.disabled = false;
       if(res.error || !res.data || !res.data[0]){
         console.error(res.error); toast("No se pudo guardar — revisa tu conexión");
@@ -307,9 +379,12 @@
       }
       var row = res.data[0];
       var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
       addReportIfNew(r); closeSheet(); updateCount();
       toast("Reporte guardado ✓");
+    }).catch(function(err){
+      saveBtn.disabled = false;
+      console.error(err); toast("No se pudo subir la foto — revisa tu conexión");
     });
   });
 
@@ -328,6 +403,7 @@
       '<div class="pop"><b>'+c.label+'</b><br>'+
       '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVLABEL[r.sev]+'</span>'+
       '<div class="by">Reportado por '+escapeHtml(r.reportero||"alguien")+'</div>'+
+      (r.foto_url?'<img class="popimg" src="'+r.foto_url+'" alt="Foto del reporte">':'')+
       (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
       '<button class="del" data-id="'+r.id+'">Eliminar reporte</button></div>'
     );
@@ -338,7 +414,10 @@
   document.addEventListener("click",function(e){
     if(e.target && e.target.classList.contains("del")){
       var id=Number(e.target.dataset.id);
-      if(!window.confirm("¿Eliminar este reporte?")) return;
+      var confirmado;
+      try{ confirmado = window.confirm("¿Eliminar este reporte?"); }
+      catch(err){ confirmado = false; toast("No se pudo confirmar en este navegador"); }
+      if(!confirmado) return;
       sb.from("reportes").delete().eq("id", id).select().then(function(res){
         if(res.error || !res.data || res.data.length===0){
           console.error(res.error); toast("No se pudo eliminar todavía");
@@ -385,7 +464,7 @@
       if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
       reports = res.data.map(function(row){
         return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-                note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
+                note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
       });
       reports.forEach(addMarker);
       updateCount();
@@ -397,7 +476,7 @@
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
         var row=payload.new;
         var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, ts:row.creado_en};
+               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url, ts:row.creado_en};
         if(!addReportIfNew(r)) return;
         updateCount();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
