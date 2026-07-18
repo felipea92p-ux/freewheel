@@ -1,6 +1,6 @@
 # REVISIÓN FreeWheel — checklist para retomar
 
-> Última actualización: 2026-07-17 (noche, tras dejar Fase 1 y Fase 2 en vivo). Verificado contra el código real.
+> Última actualización: 2026-07-18 (tras desplegar linkIdentity + avatares en el mapa). Verificado contra el código real.
 > Esfuerzo: **Rápido** (<1h) · **Medio** (~medio día) · **Grande** (1+ día). Orden por impacto dentro de cada sección.
 
 ## 📍 Estado actual (en vivo en freewheel-psi.vercel.app)
@@ -12,11 +12,13 @@
 - **Diseño:** índigo cálido, foco de teclado visible, identidad ♿.
 - **Esquemas SQL** (ya corridos): `supabase-schema.sql` (base), `supabase-fase1-cuentas.sql`, `supabase-fase2-perfiles.sql`.
 
-> **🔸 Hay mejoras commiteadas localmente que AÚN NO están desplegadas** (se hicieron en la revisión nocturna, sin subir a propósito para que las revises): indicador de carga, mensaje amable de ruta sin datos, cierre del panel de cuenta al tocar fuera, y propagación de ediciones en tiempo real. Para verlas en vivo: revisar con `git log --oneline`, y si están bien, `git push origin main` (Vercel despliega solo). Nada de esto tocó la base de datos.
+> **✅ Todo lo local ya está DESPLEGADO** (2026-07-18): indicador de carga, mensaje amable de ruta sin datos, cierre del panel de cuenta al tocar fuera, propagación de ediciones en tiempo real, **conservar reportes anónimos al entrar con Google** (linkIdentity) y **avatares/nombre de perfil en los pines**. Nada de esto tocó la base de datos.
 
 ---
 
 ## ⚠️ LO PRIMERO PARA MAÑANA (pendientes concretos de la sesión)
+
+0. **Activar "Allow manual linking" en Supabase** — *Rápido* · Authentication → **Sign In / Providers** → sección **User Signups** → activar **Allow manual linking**. Sin esto, entrar con Google **no** conserva los reportes hechos como anónimo (el código lo intenta con `linkIdentity` y, si el toggle está apagado, cae a login normal sin romperse — pero los reportes quedan huérfanos). Con el toggle activo, "tus reportes te siguen" se cumple de verdad.
 
 1. **Hacer admins a Cayla y Carlos** — *Rápido (SQL)* · Para que puedan moderar (borrar/editar cualquier reporte). La tabla `admins` está vacía. Pasos: que cada uno entre con Google una vez → `select id, email from auth.users;` → `insert into public.admins (user_id) values ('<uid>');`. Ver notas en `supabase-fase2-perfiles.sql`.
 
@@ -28,28 +30,22 @@
 
 ## 🐛 BUGS / cosas frágiles
 
-1. **[ALTO] El login con Google NO conserva los reportes hechos mientras eras anónimo** — *Medio* ·
-   El código usa `signInWithOAuth`, que crea una cuenta **separada** de la anónima. Los reportes que alguien hizo antes de entrar con Google quedan huérfanos: ya no puede editarlos/borrarlos y **no "lo siguen"** — lo cual contradice la promesa de "tus reportes te siguen". Fix correcto: usar `sb.auth.linkIdentity({provider:'google'})` para vincular Google a la cuenta anónima actual (conserva el uid y los reportes), con fallback a `signInWithOAuth` cuando el usuario entra en otro dispositivo (Google ya vinculado a otra cuenta). Requiere activar **"Allow manual linking"** en Supabase (Authentication → User Signups). Es la mejora #1 de cuentas.
-
-2. **[MEDIO] La foto/nombre del perfil NO se muestran en los reportes** — *Medio* ·
-   El popup sigue mostrando el `reportero` (texto del apodo), no el avatar/nombre del perfil de Google de quien lo hizo. Para que se vean los avatares en el mapa hay que unir `reportes` con `perfiles` (por `user_id`) al cargar. Es lo que "cierra" el valor visual del login.
-
-3. **[MEDIO] La API key de OpenRouteService está expuesta en el código público** — *Medio* ·
+1. **[MEDIO] La API key de OpenRouteService está expuesta en el código público** — *Medio* ·
    Cualquiera puede copiarla y gastar tu cuota (2000/día) o usarla. Mitigar: restringir la key por dominio en el panel de ORS, o proxy vía función serverless (Vercel) con la key en secreto.
 
-4. **[MEDIO] Las fotos de celular pueden salir giradas** — *Medio* ·
+2. **[MEDIO] Las fotos de celular pueden salir giradas** — *Medio* ·
    Al comprimir en `<canvas>` se pierde la orientación EXIF; fotos verticales se guardan de lado. Leer EXIF y rotar antes de subir.
 
-5. **[MEDIO] Sin escala: se cargan TODOS los reportes, un marcador por cada uno** — *Grande* ·
-   `loadReports()` hace `select("*")` sin límite y crea un pin por reporte. Con cientos, el mapa se pone lento en celular; con miles, se traba. Falta clustering o cargar solo el área visible. Urgirá cuando la comunidad aporte de verdad.
+3. **[MEDIO] Sin escala: se cargan TODOS los reportes, un marcador por cada uno** — *Grande* ·
+   `loadReports()` hace `select("*")` sin límite y crea un pin por reporte. Con cientos, el mapa se pone lento en celular; con miles, se traba. (Ahora además trae los perfiles con `.in("user_id", …)`; con muchos autores la URL crece — otra razón para paginar/acotar al área visible.) Urgirá cuando la comunidad aporte de verdad.
 
-6. **[MEDIO] Moderación de contenido ajeno (spam/ofensas)** — *Grande* ·
+4. **[MEDIO] Moderación de contenido ajeno (spam/ofensas)** — *Grande* ·
    Con login, ya hay identidad y admins (una vez configurados), pero falta el botón **"marcar como inapropiado"** y que cualquiera pueda insertar sin límite sigue abierto. Cuando el link circule, conviene rate-limit + reporte de contenido (parte de la Fase 3).
 
-7. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
+5. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
    Tabulando se puede salir a los controles del mapa detrás. Falta focus-trap (accesibilidad).
 
-8. **[BAJO] El panel de RUTA no se cierra al tocar fuera** — *Rápido* ·
+6. **[BAJO] El panel de RUTA no se cierra al tocar fuera** — *Rápido* ·
    El panel de cuenta ya cierra con clic afuera (hecho). Falta el de ruta, pero es más delicado por su modo "elegir punto en el mapa" (no debe cerrarse al tocar el mapa para picar); dejarlo para cuando se pueda probar bien.
 
 ---
@@ -93,9 +89,14 @@ La búsqueda funciona en todo Perú, pero la marca, el mapa inicial y los report
 
 ---
 
+## ✅ Resuelto el 2026-07-18
+- **[bug ALTO] Entrar con Google ahora conserva los reportes anónimos** — `linkIdentity` vincula Google a la cuenta anónima (mismo uid), con fallback seguro a `signInWithOAuth` en otro dispositivo. **Falta el toggle "Allow manual linking" en Supabase** (pendiente #0) para que surta efecto pleno.
+- **[bug MEDIO] Avatares y nombre de perfil en los pines** — al cargar reportes se traen los perfiles por `user_id` y se pintan (foto + nombre de Google) en el popup; sin perfil, cae al apodo. El perfil propio se cachea al loguearse.
+- **Todo lo local quedó desplegado** en freewheel-psi.vercel.app.
+
 ## ✅ Resuelto el 2026-07-17
 - Cuentas Fase 1 (identidad anónima + borrar/editar lo propio, RLS) y Fase 2 (login Google + perfiles + avatares + panel vistoso) — **en vivo**.
-- *(commits locales, aún sin desplegar)* Indicador "Cargando mapa…" al abrir; mensaje amable cuando ORS no encuentra ruta accesible; log de fallos al guardar perfil; el panel de cuenta se cierra al tocar fuera; **las ediciones ahora se propagan en tiempo real** (handler UPDATE en la suscripción, además de INSERT/DELETE).
+- Indicador "Cargando mapa…" al abrir; mensaje amable cuando ORS no encuentra ruta accesible; log de fallos al guardar perfil; el panel de cuenta se cierra al tocar fuera; **las ediciones ahora se propagan en tiempo real** (handler UPDATE en la suscripción, además de INSERT/DELETE).
 - Bug: botón "Eliminar" ahora funciona (para el dueño) — antes fallaba siempre por falta de política RLS.
 - Zoom de página habilitado (accesibilidad); foto elegible desde galería (quitado `capture`).
 - Apodo como campo editable en la hoja (adiós al `prompt()` que dejaba "Anónimo").
