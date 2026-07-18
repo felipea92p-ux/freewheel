@@ -703,6 +703,19 @@
         updateCount();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
       })
+      .on("postgres_changes",{event:"UPDATE",schema:"public",table:"reportes"},function(payload){
+        var row=payload.new;
+        var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
+               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
+               user_id:row.user_id, ts:row.creado_en};
+        var idx=-1;
+        for(var i=0;i<reports.length;i++){ if(reports[i].id===r.id){ idx=i; break; } }
+        if(idx===-1){ if(addReportIfNew(r)) updateCount(); return; } // no lo teníamos: agrégalo
+        reports[idx]=r;                                              // reemplaza con los datos nuevos
+        var mk=markers.filter(function(x){return x.id===r.id;})[0]; // y repinta su marcador
+        if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==r.id;}); }
+        addMarker(r);
+      })
       .on("postgres_changes",{event:"DELETE",schema:"public",table:"reportes"},function(payload){
         var id=payload.old.id;
         reports=reports.filter(function(x){return x.id!==id;});
