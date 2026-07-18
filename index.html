@@ -201,11 +201,16 @@
     background:var(--ink);color:#fff;padding:12px 20px;border-radius:999px;font-size:14px;font-weight:600;
     box-shadow:var(--shadow);opacity:0;transition:opacity .3s;pointer-events:none;max-width:90vw;text-align:center}
   .toast.show{opacity:1}
+  .loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2;
+    background:var(--surface);color:var(--muted);padding:10px 18px;border-radius:999px;
+    font-size:14px;font-weight:600;box-shadow:var(--shadow);border:1px solid var(--hair)}
+  .loading.hide{display:none}
   @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
 <body>
 <div id="map" role="application" aria-label="Mapa de accesibilidad de Trujillo"></div>
+<div class="loading" id="loading" role="status">Cargando mapa…</div>
 
 <header class="topbar">
   <div class="logo" aria-hidden="true">♿</div>
@@ -873,7 +878,14 @@
     }).then(function(r){
       if(!r.ok){
         return r.json().then(function(err){
-          throw new Error((err.error && err.error.message) || "No se pudo trazar la ruta");
+          var m = (err.error && err.error.message) || "";
+          // ORS suele fallar en zonas de Trujillo con pocos datos de veredas en OpenStreetMap
+          // ("Route could not be found" / "routable point"). Traducimos a algo útil.
+          if(/rout|point|find|snap/i.test(m)){
+            throw new Error("No hay datos suficientes de veredas accesibles en esa zona todavía. "
+              +"Prueba con puntos sobre avenidas o lugares más conocidos.");
+          }
+          throw new Error(m || "No se pudo trazar la ruta");
         });
       }
       return r.json();
@@ -935,7 +947,10 @@
 
   map.on("load", function(){
     // Esperar la identidad antes de pintar reportes, para saber cuáles son tuyos (botones editar/eliminar).
-    sessionReady.then(loadReports).then(subscribeRealtime);
+    sessionReady.then(loadReports).then(function(){
+      var l = el("loading"); if(l) l.classList.add("hide");
+      subscribeRealtime();
+    });
     map.addSource("route", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
     map.addLayer({
       id:"route-line", type:"line", source:"route",

@@ -58,11 +58,7 @@
 
 2. **Cola offline para reportes** — *Grande* · En la calle con señal intermitente, guardar en cola local y subir cuando vuelva la conexión. Hoy si falla, la hoja no se cierra y se puede reintentar, pero no hay cola.
 
-3. **Indicador de carga al abrir** — *Rápido* · Un "Cargando reportes…" evita la sensación de app rota los primeros segundos (el mapa tarda en cargar teselas).
-
-4. **Mensaje claro cuando no hay ruta accesible** — *Rápido* · En zonas con pocos datos de veredas en OSM, la ruta falla; un mensaje tipo "no hay datos suficientes de veredas en esa zona todavía" es más útil que el genérico.
-
-5. **Editar/cambiar el apodo desde el panel de cuenta** — *Rápido* · Hoy el apodo se edita en la hoja de reporte; tenerlo también en el perfil sería más claro para usuarios logueados.
+3. **Editar/cambiar el apodo desde el panel de cuenta** — *Rápido* · Hoy el apodo se edita en la hoja de reporte; tenerlo también en el perfil sería más claro para usuarios logueados.
 
 ---
 
@@ -97,6 +93,7 @@ La búsqueda funciona en todo Perú, pero la marca, el mapa inicial y los report
 
 ## ✅ Resuelto el 2026-07-17
 - Cuentas Fase 1 (identidad anónima + borrar/editar lo propio, RLS) y Fase 2 (login Google + perfiles + avatares + panel vistoso) — **en vivo**.
+- *(commit local, aún sin desplegar)* Indicador "Cargando mapa…" al abrir; mensaje amable cuando ORS no encuentra ruta accesible ("no hay datos suficientes de veredas en esa zona todavía"); log de fallos al guardar perfil.
 - Bug: botón "Eliminar" ahora funciona (para el dueño) — antes fallaba siempre por falta de política RLS.
 - Zoom de página habilitado (accesibilidad); foto elegible desde galería (quitado `capture`).
 - Apodo como campo editable en la hoja (adiós al `prompt()` que dejaba "Anónimo").
