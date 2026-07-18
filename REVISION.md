@@ -5,6 +5,7 @@
 > El orden dentro de cada sección es por impacto (lo de arriba pesa más).
 
 ## ✅ Ya resuelto (2026-07-17, mismo día)
+- **Sistema de cuentas — Fase 1 COMPLETA y en vivo:** identidad anónima silenciosa por dispositivo (Supabase anonymous auth) + cada quien **borra y edita solo lo suyo**, verificado por el servidor (RLS). Esquema en `supabase-fase1-cuentas.sql` (ya corrido). Resuelve el bug #1 (el botón Eliminar ahora funciona para el dueño) y da base a la moderación. **Falta Fase 2** (login Google + perfiles + avatares; agregar a Cayla/Carlos a la tabla `admins`) y **Fase 3** (estrellas + "marcar inapropiado").
 - Bug #7 — se habilitó el zoom de la página (accesibilidad).
 - Bug #5 — el apodo ahora es un campo editable en la hoja (adiós al pop-up que dejaba "Anónimo").
 - Mejora #1 — botón "Usar mi ubicación" para el origen de la ruta (GPS).
