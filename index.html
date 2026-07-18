@@ -4,7 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#4A44A0" />
-<title>FreeWheel — Trujillo accesible</title>
+<title>FreeWheel — Trujillo sin barreras</title>
+<meta name="description" content="Mapa comunitario de Trujillo para moverse sin barreras: marca y encuentra rampas, veredas y rutas accesibles para sillas de ruedas, coches de bebé y adultos mayores." />
+<meta property="og:title" content="FreeWheel — Trujillo sin barreras" />
+<meta property="og:description" content="Marca y encuentra rutas accesibles en Trujillo. Para sillas de ruedas, coches de bebé y adultos mayores — hecho en comunidad." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://freewheel-psi.vercel.app/" />
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style>
   :root{
@@ -217,7 +222,7 @@
 
 <header class="topbar">
   <div class="logo" aria-hidden="true">♿</div>
-  <div class="brand"><b>FreeWheel</b><span>Trujillo accesible · en comunidad</span></div>
+  <div class="brand"><b>FreeWheel</b><span>Trujillo sin barreras · en comunidad</span></div>
   <div class="count" id="count" aria-live="polite">0 reportes</div>
   <button class="routebtn" id="routeBtn" aria-label="Buscar ruta accesible" aria-pressed="false">🧭</button>
   <button class="acctbtn" id="acctBtn" aria-label="Mi cuenta" aria-pressed="false">👤</button>
@@ -287,7 +292,7 @@
   <div class="label">Tipo de barrera</div>
   <div class="cats" id="cats"></div>
 
-  <div class="label">¿Qué tan grave es para una silla de ruedas?</div>
+  <div class="label">¿Qué tan difícil es de pasar con silla, coche de bebé o andador?</div>
   <div class="sev">
     <button class="sevbtn g" data-sev="green" aria-pressed="false"><span class="cir"></span>Accesible</button>
     <button class="sevbtn a" data-sev="amber" aria-pressed="false"><span class="cir"></span>Con dificultad</button>
@@ -1053,7 +1058,7 @@
       if(bounds) map.fitBounds([[bounds[0],bounds[1]],[bounds[2],bounds[3]]], {padding:60});
       var s = feature.properties.summary;
       var km = (s.distance/1000).toFixed(1), min = Math.round(s.duration/60);
-      var msg = "≈ "+km+" km · "+min+" min en silla de ruedas";
+      var msg = "≈ "+km+" km · "+min+" min por ruta accesible";
       var origenAprox = res.geos[0].approx, destinoAprox = res.geos[1].approx;
       if(origenAprox || destinoAprox){
         var cual = origenAprox && destinoAprox ? "origen ni el destino" : origenAprox ? "origen" : "destino";
