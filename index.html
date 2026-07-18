@@ -532,27 +532,45 @@
     return n;
   }
 
+  // Dibuja una fuente ya orientada (bitmap o <img>) en un canvas reducido y devuelve un JPEG.
+  function drawToJpeg(src, srcW, srcH, resolve, reject){
+    var maxDim = 1280, w = srcW, h = srcH;
+    if(w > maxDim || h > maxDim){
+      if(w > h){ h = Math.round(h * maxDim / w); w = maxDim; }
+      else { w = Math.round(w * maxDim / h); h = maxDim; }
+    }
+    var canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(src, 0, 0, w, h);
+    canvas.toBlob(function(blob){
+      if(blob) resolve(blob); else reject(new Error("No se pudo procesar la imagen"));
+    }, "image/jpeg", 0.7);
+  }
+
   function compressImage(file){
     return new Promise(function(resolve, reject){
-      var url = URL.createObjectURL(file);
-      var img = new Image();
-      img.onload = function(){
-        URL.revokeObjectURL(url);
-        var maxDim = 1280, w = img.width, h = img.height;
-        if(w > maxDim || h > maxDim){
-          if(w > h){ h = Math.round(h * maxDim / w); w = maxDim; }
-          else { w = Math.round(w * maxDim / h); h = maxDim; }
-        }
-        var canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        canvas.toBlob(function(blob){
-          if(blob) resolve(blob); else reject(new Error("No se pudo procesar la imagen"));
-        }, "image/jpeg", 0.7);
-      };
-      img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen")); };
-      img.src = url;
+      // Ruta moderna: createImageBitmap con imageOrientation "from-image" hornea la
+      // orientación EXIF en el bitmap, así las fotos verticales del celular no salen giradas.
+      if(typeof createImageBitmap === "function"){
+        createImageBitmap(file, {imageOrientation:"from-image"}).then(function(bmp){
+          drawToJpeg(bmp, bmp.width, bmp.height, function(blob){ bmp.close && bmp.close(); resolve(blob); }, reject);
+        }).catch(function(){ compressWithImg(file, resolve, reject); });
+      } else {
+        compressWithImg(file, resolve, reject);
+      }
     });
+  }
+
+  // Fallback para navegadores viejos (sin createImageBitmap o sin soporte de orientación).
+  function compressWithImg(file, resolve, reject){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      drawToJpeg(img, img.width, img.height, resolve, reject);
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); reject(new Error("No se pudo leer la imagen")); };
+    img.src = url;
   }
 
   function uploadPhotoIfAny(){
