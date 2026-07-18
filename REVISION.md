@@ -71,7 +71,7 @@
 
 6. **"Cerca de mí": lista de puntos accesibles/bloqueados alrededor** — *Medio* · A veces solo quieres saber "¿qué hay difícil cerca?" antes de salir.
 
-7. **Reporte rápido: un toque para "bloqueado aquí"** — *Rápido* · Registrar al vuelo en la calle, detalle después.
+7. ~~**Reporte rápido: un toque para "bloqueado aquí"**~~ ✅ Hecho (2026-07-18).
 
 8. **Modo voz reforzado para Carlos** — *Medio* · Botón de voz grande, elegir categoría por voz; respeta su movilidad limitada de manos.
 
@@ -92,6 +92,7 @@ La búsqueda funciona en todo Perú, pero la marca, el mapa inicial y los report
 - **[bug MEDIO] Fotos de celular ya no salen giradas** — `createImageBitmap` con `imageOrientation:"from-image"` hornea la orientación EXIF antes de comprimir; fallback a `<img>` en navegadores viejos.
 - **[difusión] Compartir un punto por WhatsApp** — botón "Compartir" en cada pin; `navigator.share` (hoja del sistema) o `wa.me`/copiar link; el link `?r=<id>` abre la app volando a ese punto. Verificado en la página en vivo (parse de `?r=` y armado del link/texto); falta confirmar visualmente en celular que el popup abre solo.
 - **[identidad] "Trujillo sin barreras"** — público ampliado a sillas de ruedas + coches de bebé + adultos mayores (mismo modelo de barreras). Tagline, pregunta de gravedad y ETA reescritas; meta description + Open Graph para preview al compartir. **Ciegos = producto aparte a futuro** (barreras distintas + el mapa visual es en sí una barrera). Decisión guardada en la memoria del proyecto.
+- **[adopción] Reporte rápido** — botón rojo "🔴 Bloqueado aquí" sobre el FAB: un toque → "toca dónde está bloqueado" → guarda directo un reporte (obstáculo, rojo) **sin abrir el formulario**; el detalle se agrega luego tocando el pin → Editar. Baja la fricción en la calle (clave para Carlos). Verificado en vivo el ingreso al modo + hint + cancelar + layout; el save-on-tap reusa el insert probado del Guardar (confirmar el round-trip en celular).
 - **[adopción] Pantalla de bienvenida (primera vez)** — overlay ligero (localStorage `fw_welcomed`) que dice qué es FreeWheel para el público ampliado y la única acción ("Reportar aquí"); baja la fricción de primer contacto para quien recibe el link. Verificado en vivo de punta a punta (aparece, cierra con "Empecemos", persiste el flag) + captura visual OK.
 - **[comunidad] "Actividad reciente" (motor de aliento, pieza A)** — tocar el contador de reportes abre los últimos aportes (quién/qué/cuándo); cada fila vuela al punto. Sin ubicación en vivo ni cambio de BD. Verificado: toggle del panel + estado vacío en vivo, orden y render con datos de prueba. Siguiente: B (confirmaciones) y C (presencia en vivo) sobre los mismos datos, en secuencia.
 - **Todo lo local quedó desplegado** en freewheel-psi.vercel.app.
