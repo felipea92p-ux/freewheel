@@ -38,6 +38,25 @@
   .routebtn{background:rgba(255,255,255,.16);border:none;border-radius:50%;
     width:34px;height:34px;font-size:17px;color:#fff;cursor:pointer;flex-shrink:0}
   .routebtn[aria-pressed="true"]{background:#fff;color:var(--accent)}
+  .acctbtn{background:rgba(255,255,255,.16);border:none;border-radius:50%;
+    width:34px;height:34px;font-size:16px;color:#fff;cursor:pointer;flex-shrink:0;
+    padding:0;overflow:hidden;display:grid;place-items:center}
+  .acctbtn img{width:100%;height:100%;object-fit:cover}
+  .acctbtn[aria-pressed="true"]{box-shadow:0 0 0 2px #fff}
+
+  /* ---- Cuenta ---- */
+  .acctpanel{position:absolute;top:60px;right:12px;z-index:7;background:var(--surface);
+    border-radius:14px;box-shadow:var(--shadow);padding:16px;width:260px;max-width:92vw;display:none}
+  .acctpanel.show{display:block}
+  .accthint{margin:0 0 12px;font-size:13.5px;color:var(--muted);line-height:1.4}
+  .gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+    background:#fff;color:var(--ink);border:1.5px solid var(--hair)}
+  .gicon{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;
+    background:#fff;color:#4285F4;font-weight:800;font-family:Arial,sans-serif;border:1px solid var(--hair)}
+  .acctrow{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .acctavatar{width:46px;height:46px;border-radius:50%;object-fit:cover;background:var(--hair);flex-shrink:0}
+  .acctname{font-weight:700;font-size:15px;color:var(--ink)}
+  .acctstars{font-size:12.5px;color:var(--muted);margin-top:1px}
 
   /* ---- Ruta ---- */
   .routepanel{position:absolute;top:60px;left:12px;right:12px;z-index:6;background:var(--surface);
@@ -181,7 +200,21 @@
   <div class="brand"><b>FreeWheel</b><span>Trujillo accesible · en comunidad</span></div>
   <div class="count" id="count" aria-live="polite">0 reportes</div>
   <button class="routebtn" id="routeBtn" aria-label="Buscar ruta accesible" aria-pressed="false">🧭</button>
+  <button class="acctbtn" id="acctBtn" aria-label="Mi cuenta" aria-pressed="false">👤</button>
 </header>
+
+<div class="acctpanel" id="acctPanel" role="region" aria-label="Mi cuenta">
+  <div id="acctAnon">
+    <p class="accthint">Entra para tener tu perfil, tu avatar y que tus reportes te sigan en cualquier dispositivo.</p>
+    <button class="btn gbtn" id="googleBtn" type="button">
+      <span class="gicon">G</span> Entrar con Google
+    </button>
+  </div>
+  <div id="acctUser" style="display:none">
+    <div class="acctrow"><img id="acctAvatar" class="acctavatar" alt=""><div><div id="acctName" class="acctname"></div><div class="acctstars" id="acctStars"></div></div></div>
+    <button class="btn ghost" id="signoutBtn" type="button">Cerrar sesión</button>
+  </div>
+</div>
 
 <div class="routepanel" id="routePanel" role="region" aria-label="Buscar ruta">
   <div class="routerow">
@@ -275,14 +308,26 @@
   // que cada quien borre/edite solo lo suyo (verificado por el servidor con RLS).
   // Si el toggle "Anonymous sign-ins" aún no está activo, degrada con gracia: sigue
   // funcionando como antes (sin sesión) hasta que se active.
-  var myUid = null;
+  var myUid = null, myUser = null;
   var sessionReady = sb.auth.getSession().then(function(res){
-    if(res.data && res.data.session){ myUid = res.data.session.user.id; return; }
+    if(res.data && res.data.session){ myUser = res.data.session.user; myUid = myUser.id; return; }
     return sb.auth.signInAnonymously().then(function(r){
       if(r.error){ console.warn("Sesión anónima no disponible todavía:", r.error.message); return; }
-      myUid = r.data.session.user.id;
+      myUser = r.data.user; myUid = r.data.user.id;
     });
+  }).then(function(){
+    // Si entró con Google (cuenta permanente), crea/actualiza su perfil con nombre y avatar.
+    if(myUser && myUser.is_anonymous === false){ return upsertPerfil(myUser); }
   }).catch(function(e){ console.warn("Auth:", e && e.message); });
+
+  function upsertPerfil(u){
+    var meta = u.user_metadata || {};
+    return sb.from("perfiles").upsert({
+      user_id: u.id,
+      nombre: meta.full_name || meta.name || null,
+      avatar_url: meta.avatar_url || meta.picture || null
+    }, {onConflict:"user_id"}).then(function(){}, function(){});
+  }
 
   // Trujillo es el ancla del mapa y el centro de referencia de la búsqueda
   // (los resultados cercanos a Trujillo salen primero), pero se busca en todo el país.
@@ -653,8 +698,38 @@
     var show = !routePanel.classList.contains("show");
     routePanel.classList.toggle("show", show);
     routeBtn.setAttribute("aria-pressed", show ? "true" : "false");
+    if(show){ acctPanel.classList.remove("show"); acctBtn.setAttribute("aria-pressed","false"); }
     if(!show && (pickMode==="from" || pickMode==="to")) stopPicking();
   });
+
+  // ---- cuenta (Fase 2): login con Google, perfil, avatar ----
+  var acctBtn=el("acctBtn"), acctPanel=el("acctPanel"), googleBtn=el("googleBtn"), signoutBtn=el("signoutBtn");
+  acctBtn.addEventListener("click", function(){
+    var show = !acctPanel.classList.contains("show");
+    acctPanel.classList.toggle("show", show);
+    acctBtn.setAttribute("aria-pressed", show?"true":"false");
+    if(show){ routePanel.classList.remove("show"); routeBtn.setAttribute("aria-pressed","false"); }
+  });
+  googleBtn.addEventListener("click", function(){
+    sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin + location.pathname } });
+  });
+  signoutBtn.addEventListener("click", function(){
+    sb.auth.signOut().then(function(){ location.reload(); });
+  });
+  function refreshAccountUI(){
+    var logged = !!(myUser && myUser.is_anonymous === false);
+    el("acctAnon").style.display = logged ? "none":"block";
+    el("acctUser").style.display = logged ? "block":"none";
+    if(!logged){ acctBtn.textContent = "👤"; return; }
+    var meta = myUser.user_metadata || {};
+    el("acctName").textContent = meta.full_name || meta.name || myUser.email || "Tú";
+    var avatar = meta.avatar_url || meta.picture || "";
+    if(avatar){ el("acctAvatar").src = avatar; acctBtn.innerHTML = '<img src="'+encodeURI(avatar)+'" alt="">'; }
+    sb.from("perfiles").select("estrellas").eq("user_id", myUser.id).maybeSingle().then(function(p){
+      el("acctStars").textContent = "⭐ "+((p.data&&p.data.estrellas)||0)+" estrellas";
+    });
+  }
+  sessionReady.then(refreshAccountUI);
 
   pickFrom.addEventListener("click", function(){ pickMode==="from" ? stopPicking() : startPicking("from"); });
   pickTo.addEventListener("click", function(){ pickMode==="to" ? stopPicking() : startPicking("to"); });
