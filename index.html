@@ -192,7 +192,9 @@
   .pop .by .byavatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0}
   .pop .popimg{display:block;max-width:100%;max-height:160px;border-radius:10px;margin:4px 0}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
-  .pop .popacts{display:flex;gap:16px;margin-top:2px}
+  .pop .popacts{display:flex;gap:16px;margin-top:2px;align-items:center}
+  .pop .share{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;
+    font-family:inherit;font-size:13.5px;padding:0;margin-right:auto}
   .pop .edit{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;
     font-family:inherit;font-size:13.5px;padding:0}
   .pop .del{background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;
@@ -637,10 +639,13 @@
     d.className="pin "+r.sev; d.innerHTML="<span>"+c.em+"</span>";
     d.setAttribute("role","button");
     d.setAttribute("aria-label",c.label+", "+SEVLABEL[r.sev]);
-    var acciones = esMio(r)
-      ? '<div class="popacts"><button class="edit" data-id="'+r.id+'">Editar</button>'
-        +'<button class="del" data-id="'+r.id+'">Eliminar</button></div>'
-      : '';
+    var acciones = '<div class="popacts">'
+      + '<button class="share" data-id="'+r.id+'">↗ Compartir</button>'
+      + (esMio(r)
+          ? '<button class="edit" data-id="'+r.id+'">Editar</button>'
+            +'<button class="del" data-id="'+r.id+'">Eliminar</button>'
+          : '')
+      + '</div>';
     var info = reporterInfo(r);
     var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
       '<div class="pop"><b>'+c.label+'</b><br>'+
@@ -655,8 +660,30 @@
       .setLngLat([r.lng,r.lat]).setPopup(popup).addTo(map);
     markers.push({id:r.id,marker:m});
   }
+  // Compartir un punto por WhatsApp / hoja de compartir del sistema, con link que abre ese punto.
+  function shareReport(rep){
+    if(!rep) return;
+    var c = CATS.filter(function(x){return x.id===rep.cat;})[0] || {label:"Reporte"};
+    var url = location.origin + location.pathname + "?r=" + rep.id;
+    var texto = "FreeWheel · "+c.label+" ("+SEVLABEL[rep.sev]+") en Trujillo. Míralo en el mapa: ";
+    if(navigator.share){
+      navigator.share({title:"FreeWheel", text:texto, url:url}).catch(function(){});
+    } else if(navigator.clipboard && navigator.clipboard.writeText){
+      // Escritorio sin hoja de compartir: copiar el link y abrir WhatsApp Web con el mensaje listo.
+      navigator.clipboard.writeText(url).then(function(){ toast("Link copiado"); }, function(){});
+      window.open("https://wa.me/?text="+encodeURIComponent(texto+url), "_blank", "noopener");
+    } else {
+      window.open("https://wa.me/?text="+encodeURIComponent(texto+url), "_blank", "noopener");
+    }
+  }
+
   document.addEventListener("click",function(e){
     if(!e.target) return;
+    if(e.target.classList.contains("share")){
+      var sid=Number(e.target.dataset.id);
+      shareReport(reports.filter(function(x){return x.id===sid;})[0]);
+      return;
+    }
     if(e.target.classList.contains("edit")){
       var eid=Number(e.target.dataset.id);
       var rep=reports.filter(function(x){return x.id===eid;})[0];
@@ -741,6 +768,17 @@
         updateCount();
       });
     });
+  }
+
+  // Si la URL trae ?r=<id> (link compartido), vuela a ese punto y abre su popup.
+  function openSharedReport(){
+    var rid = Number(new URLSearchParams(location.search).get("r"));
+    if(!rid) return;
+    var rep = reports.filter(function(x){return x.id===rid;})[0];
+    var mk  = markers.filter(function(x){return x.id===rid;})[0];
+    if(!rep || !mk) return;
+    map.flyTo({center:[rep.lng, rep.lat], zoom:17});
+    if(!mk.marker.getPopup().isOpen()){ mk.marker.togglePopup(); }
   }
 
   function subscribeRealtime(){
@@ -1035,6 +1073,7 @@
     sessionReady.then(loadReports).then(function(){
       var l = el("loading"); if(l) l.classList.add("hide");
       subscribeRealtime();
+      openSharedReport();   // si vino ?r=<id>, volar a ese punto y abrir su popup
     });
     map.addSource("route", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
     map.addLayer({
