@@ -340,7 +340,10 @@
     });
   }).then(function(){
     // Si entró con Google (cuenta permanente), crea/actualiza su perfil con nombre y avatar.
-    if(myUser && myUser.is_anonymous === false){ return upsertPerfil(myUser); }
+    if(myUser && myUser.is_anonymous === false){
+      sessionStorage.removeItem("fw_oauth_retry");   // login logrado: limpia el guard
+      return upsertPerfil(myUser);
+    }
   }).catch(function(e){ console.warn("Auth:", e && e.message); });
 
   function upsertPerfil(u){
@@ -353,6 +356,17 @@
       console.warn("Perfil no guardado:", err && err.message);
     });
   }
+
+  // Si un intento de VINCULAR Google volvió con error (la cuenta ya está ligada a otra
+  // sesión / otro dispositivo), entramos normalmente. Una sola vez, para no hacer bucle.
+  (function(){
+    var raw = "";
+    try{ raw = decodeURIComponent((location.hash||"") + " " + (location.search||"")); }catch(e){}
+    if(/error/i.test(raw) && /identit|already|linked|exists|manual/i.test(raw) && !sessionStorage.getItem("fw_oauth_retry")){
+      sessionStorage.setItem("fw_oauth_retry","1");
+      entrarGoogle();
+    }
+  })();
 
   // Trujillo es el ancla del mapa y el centro de referencia de la búsqueda
   // (los resultados cercanos a Trujillo salen primero), pero se busca en todo el país.
@@ -754,8 +768,20 @@
       acctPanel.classList.remove("show"); acctBtn.setAttribute("aria-pressed","false");
     }
   });
+  function entrarGoogle(){
+    return sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin + location.pathname } });
+  }
   googleBtn.addEventListener("click", function(){
-    sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin + location.pathname } });
+    var opts = { redirectTo: location.origin + location.pathname };
+    if(myUser && myUser.is_anonymous){
+      // Vincular Google a la cuenta anónima actual → conserva tus reportes.
+      // Si falla (ej. "Allow manual linking" apagado), cae a login normal sin romper nada.
+      sb.auth.linkIdentity({ provider:"google", options:opts }).then(function(res){
+        if(res && res.error){ console.warn("linkIdentity:", res.error.message); entrarGoogle(); }
+      }).catch(function(e){ console.warn("linkIdentity:", e && e.message); entrarGoogle(); });
+    } else {
+      entrarGoogle();
+    }
   });
   signoutBtn.addEventListener("click", function(){
     sb.auth.signOut().then(function(){ location.reload(); });
