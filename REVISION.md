@@ -12,6 +12,8 @@
 - **Diseño:** índigo cálido, foco de teclado visible, identidad ♿.
 - **Esquemas SQL** (ya corridos): `supabase-schema.sql` (base), `supabase-fase1-cuentas.sql`, `supabase-fase2-perfiles.sql`.
 
+> **🔸 Hay mejoras commiteadas localmente que AÚN NO están desplegadas** (se hicieron en la revisión nocturna, sin subir a propósito para que las revises): indicador de carga, mensaje amable de ruta sin datos, cierre del panel de cuenta al tocar fuera, y propagación de ediciones en tiempo real. Para verlas en vivo: revisar con `git log --oneline`, y si están bien, `git push origin main` (Vercel despliega solo). Nada de esto tocó la base de datos.
+
 ---
 
 ## ⚠️ LO PRIMERO PARA MAÑANA (pendientes concretos de la sesión)
