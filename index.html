@@ -735,6 +735,12 @@
     acctBtn.setAttribute("aria-pressed", show?"true":"false");
     if(show){ routePanel.classList.remove("show"); routeBtn.setAttribute("aria-pressed","false"); }
   });
+  // Cerrar el panel de cuenta al tocar fuera (no toca el flujo de mapa, es seguro).
+  document.addEventListener("click", function(e){
+    if(acctPanel.classList.contains("show") && !acctPanel.contains(e.target) && !acctBtn.contains(e.target)){
+      acctPanel.classList.remove("show"); acctBtn.setAttribute("aria-pressed","false");
+    }
+  });
   googleBtn.addEventListener("click", function(){
     sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin + location.pathname } });
   });

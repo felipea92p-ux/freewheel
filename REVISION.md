@@ -44,11 +44,14 @@
 6. **[MEDIO] Moderación de contenido ajeno (spam/ofensas)** — *Grande* ·
    Con login, ya hay identidad y admins (una vez configurados), pero falta el botón **"marcar como inapropiado"** y que cualquiera pueda insertar sin límite sigue abierto. Cuando el link circule, conviene rate-limit + reporte de contenido (parte de la Fase 3).
 
-7. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
+7. **[BAJO] Las ediciones de otros no se ven en tiempo real** — *Rápido* ·
+   `subscribeRealtime()` maneja INSERT y DELETE, pero **no UPDATE**. Si alguien edita su reporte (cambia severidad, nota o foto), los demás que tienen el mapa abierto siguen viendo la versión vieja hasta recargar. Agregar un handler de UPDATE que reemplace el marcador. Poco urgente (editar es raro), pero es una inconsistencia real.
+
+8. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
    Tabulando se puede salir a los controles del mapa detrás. Falta focus-trap (accesibilidad).
 
-8. **[BAJO] Los paneles (cuenta / ruta) no se cierran al tocar fuera** — *Rápido* ·
-   Se cierran entre ellos, pero no con un clic afuera. Un listener de click-away lo resolvería.
+9. **[BAJO] El panel de RUTA no se cierra al tocar fuera** — *Rápido* ·
+   El panel de cuenta ya cierra con clic afuera (hecho). Falta el de ruta, pero es más delicado por su modo "elegir punto en el mapa" (no debe cerrarse al tocar el mapa para picar); dejarlo para cuando se pueda probar bien.
 
 ---
 
@@ -93,7 +96,7 @@ La búsqueda funciona en todo Perú, pero la marca, el mapa inicial y los report
 
 ## ✅ Resuelto el 2026-07-17
 - Cuentas Fase 1 (identidad anónima + borrar/editar lo propio, RLS) y Fase 2 (login Google + perfiles + avatares + panel vistoso) — **en vivo**.
-- *(commit local, aún sin desplegar)* Indicador "Cargando mapa…" al abrir; mensaje amable cuando ORS no encuentra ruta accesible ("no hay datos suficientes de veredas en esa zona todavía"); log de fallos al guardar perfil.
+- *(commits locales, aún sin desplegar)* Indicador "Cargando mapa…" al abrir; mensaje amable cuando ORS no encuentra ruta accesible; log de fallos al guardar perfil; el panel de cuenta se cierra al tocar fuera.
 - Bug: botón "Eliminar" ahora funciona (para el dueño) — antes fallaba siempre por falta de política RLS.
 - Zoom de página habilitado (accesibilidad); foto elegible desde galería (quitado `capture`).
 - Apodo como campo editable en la hoja (adiós al `prompt()` que dejaba "Anónimo").
