@@ -38,25 +38,37 @@
   .routebtn{background:rgba(255,255,255,.16);border:none;border-radius:50%;
     width:34px;height:34px;font-size:17px;color:#fff;cursor:pointer;flex-shrink:0}
   .routebtn[aria-pressed="true"]{background:#fff;color:var(--accent)}
-  .acctbtn{background:rgba(255,255,255,.16);border:none;border-radius:50%;
-    width:34px;height:34px;font-size:16px;color:#fff;cursor:pointer;flex-shrink:0;
+  .acctbtn{background:linear-gradient(135deg,#7B74E0,#4A44A0);border:2px solid rgba(255,255,255,.5);
+    border-radius:50%;width:36px;height:36px;font-size:16px;color:#fff;cursor:pointer;flex-shrink:0;
     padding:0;overflow:hidden;display:grid;place-items:center}
   .acctbtn img{width:100%;height:100%;object-fit:cover}
-  .acctbtn[aria-pressed="true"]{box-shadow:0 0 0 2px #fff}
+  .acctbtn[aria-pressed="true"]{box-shadow:0 0 0 3px rgba(255,255,255,.55)}
 
   /* ---- Cuenta ---- */
   .acctpanel{position:absolute;top:60px;right:12px;z-index:7;background:var(--surface);
-    border-radius:14px;box-shadow:var(--shadow);padding:16px;width:260px;max-width:92vw;display:none}
+    border-radius:18px;box-shadow:var(--shadow);padding:20px 18px 18px;width:280px;max-width:92vw;
+    display:none;text-align:center}
   .acctpanel.show{display:block}
-  .accthint{margin:0 0 12px;font-size:13.5px;color:var(--muted);line-height:1.4}
-  .gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
-    background:#fff;color:var(--ink);border:1.5px solid var(--hair)}
-  .gicon{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;
-    background:#fff;color:#4285F4;font-weight:800;font-family:Arial,sans-serif;border:1px solid var(--hair)}
-  .acctrow{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-  .acctavatar{width:46px;height:46px;border-radius:50%;object-fit:cover;background:var(--hair);flex-shrink:0}
-  .acctname{font-weight:700;font-size:15px;color:var(--ink)}
-  .acctstars{font-size:12.5px;color:var(--muted);margin-top:1px}
+  .acctillus{width:60px;height:60px;margin:0 auto 10px;border-radius:50%;display:grid;place-items:center;
+    font-size:30px;background:linear-gradient(135deg,#ECEBF7,#D9D6F3);box-shadow:0 4px 14px -6px rgba(74,68,160,.5)}
+  .accttitle{font-size:17px;font-weight:800;color:var(--ink);margin-bottom:6px}
+  .accthint{margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.5}
+  .accthint b{color:var(--ink)}
+  .gbtn{display:flex;align-items:center;justify-content:center;gap:11px;width:100%;min-height:var(--touch);
+    border-radius:13px;background:#fff;color:#3c4043;border:1.5px solid var(--hair);
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px -4px rgba(0,0,0,.2)}
+  .gbtn:active{transform:scale(.98)}
+  .glogo{width:20px;height:20px;flex-shrink:0}
+  .acctrow{display:flex;align-items:center;gap:13px;margin-bottom:16px;text-align:left}
+  .avatarwrap{width:52px;height:52px;border-radius:50%;flex-shrink:0;padding:2px;
+    background:linear-gradient(135deg,#7B74E0,#4A44A0)}
+  .acctavatar{width:100%;height:100%;border-radius:50%;object-fit:cover;background:var(--surface);
+    border:2px solid var(--surface);display:block}
+  .acctmeta{min-width:0}
+  .acctname{font-weight:800;font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acctstars{display:inline-block;margin-top:4px;font-size:12.5px;font-weight:700;color:#8A6D0B;
+    background:#FCF3D7;border-radius:999px;padding:3px 10px}
+  .signout{width:100%;flex:none}
 
   /* ---- Ruta ---- */
   .routepanel{position:absolute;top:60px;left:12px;right:12px;z-index:6;background:var(--surface);
@@ -205,14 +217,20 @@
 
 <div class="acctpanel" id="acctPanel" role="region" aria-label="Mi cuenta">
   <div id="acctAnon">
-    <p class="accthint">Entra para tener tu perfil, tu avatar y que tus reportes te sigan en cualquier dispositivo.</p>
-    <button class="btn gbtn" id="googleBtn" type="button">
-      <span class="gicon">G</span> Entrar con Google
+    <div class="acctillus" aria-hidden="true">🦽</div>
+    <div class="accttitle">Únete a la comunidad</div>
+    <p class="accthint">Guarda tu perfil y tu avatar, tus reportes te siguen en cualquier dispositivo, y ganas <b>⭐ estrellas</b> por aportar.</p>
+    <button class="gbtn" id="googleBtn" type="button">
+      <svg class="glogo" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+      Continuar con Google
     </button>
   </div>
   <div id="acctUser" style="display:none">
-    <div class="acctrow"><img id="acctAvatar" class="acctavatar" alt=""><div><div id="acctName" class="acctname"></div><div class="acctstars" id="acctStars"></div></div></div>
-    <button class="btn ghost" id="signoutBtn" type="button">Cerrar sesión</button>
+    <div class="acctrow">
+      <div class="avatarwrap"><img id="acctAvatar" class="acctavatar" alt=""></div>
+      <div class="acctmeta"><div id="acctName" class="acctname"></div><div class="acctstars" id="acctStars"></div></div>
+    </div>
+    <button class="btn ghost signout" id="signoutBtn" type="button">Cerrar sesión</button>
   </div>
 </div>
 
