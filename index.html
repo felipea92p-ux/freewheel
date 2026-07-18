@@ -188,7 +188,8 @@
   .maplibregl-popup-content{border-radius:14px;padding:14px 16px;box-shadow:var(--shadow);font-family:var(--sans)}
   .pop b{font-size:15px} .pop .sev-tag{display:inline-block;border-radius:999px;
     padding:2px 10px;font-size:12px;font-weight:700;margin:6px 0}
-  .pop .by{color:var(--muted);font-size:12px;margin:2px 0 6px}
+  .pop .by{color:var(--muted);font-size:12px;margin:2px 0 6px;display:flex;align-items:center;gap:6px}
+  .pop .by .byavatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0}
   .pop .popimg{display:block;max-width:100%;max-height:160px;border-radius:10px;margin:4px 0}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
   .pop .popacts{display:flex;gap:16px;margin-top:2px}
@@ -404,6 +405,7 @@
   var pickMode = null; // null | "report" | "from" | "to"
   var draft = null; // {lng,lat,cat,sev}
   var routePicked = {from:null, to:null}; // [lng,lat] cuando se eligió tocando el mapa
+  var perfilesCache = {};                 // {user_id: {nombre, avatar_url}} de quienes reportaron
 
   var el = function(id){return document.getElementById(id);};
   var sheet=el("sheet"), backdrop=el("backdrop"), catsBox=el("cats"),
@@ -602,6 +604,11 @@
 
   // ---- marcadores ----
   function esMio(r){ return !!(myUid && r.user_id && r.user_id===myUid); }
+  // Nombre y avatar de quien reportó: usa el perfil (login con Google) si existe, si no el apodo.
+  function reporterInfo(r){
+    var p = (r.user_id && perfilesCache[r.user_id]) || null;
+    return { nombre: (p && p.nombre) || r.reportero || "alguien", avatar: (p && p.avatar_url) || "" };
+  }
   function addReportIfNew(r){
     if(reports.some(function(x){return x.id===r.id;})) return false;
     reports.push(r); addMarker(r); return true;
@@ -616,10 +623,12 @@
       ? '<div class="popacts"><button class="edit" data-id="'+r.id+'">Editar</button>'
         +'<button class="del" data-id="'+r.id+'">Eliminar</button></div>'
       : '';
+    var info = reporterInfo(r);
     var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
       '<div class="pop"><b>'+c.label+'</b><br>'+
       '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVLABEL[r.sev]+'</span>'+
-      '<div class="by">Reportado por '+escapeHtml(r.reportero||"alguien")+(r.ts?' · '+timeAgo(r.ts):'')+'</div>'+
+      '<div class="by">'+(info.avatar?'<img class="byavatar" src="'+encodeURI(info.avatar)+'" alt="">':'')
+        +'Reportado por '+escapeHtml(info.nombre)+(r.ts?' · '+timeAgo(r.ts):'')+'</div>'+
       (r.foto_url?'<a href="'+encodeURI(r.foto_url)+'" target="_blank" rel="noopener"><img class="popimg" src="'+encodeURI(r.foto_url)+'" alt="Foto del reporte (toca para ampliar)"></a>':'')+
       (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
       acciones+'</div>'
@@ -701,8 +710,18 @@
                 note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
                 user_id:row.user_id, ts:row.creado_en};
       });
-      reports.forEach(addMarker);
-      updateCount();
+      // Traer los perfiles (nombre/avatar) de quienes reportaron, para pintarlos en los pines.
+      var ids = {}; reports.forEach(function(r){ if(r.user_id) ids[r.user_id]=1; });
+      var idList = Object.keys(ids);
+      var perfiles = idList.length
+        ? sb.from("perfiles").select("user_id,nombre,avatar_url").in("user_id", idList).then(function(pr){
+            (pr.data||[]).forEach(function(p){ perfilesCache[p.user_id]=p; });
+          }, function(){ /* si falla, se muestran los apodos */ })
+        : Promise.resolve();
+      return perfiles.then(function(){
+        reports.forEach(addMarker);
+        updateCount();
+      });
     });
   }
 
@@ -792,9 +811,12 @@
     el("acctUser").style.display = logged ? "block":"none";
     if(!logged){ acctBtn.textContent = "👤"; return; }
     var meta = myUser.user_metadata || {};
-    el("acctName").textContent = meta.full_name || meta.name || myUser.email || "Tú";
+    var nombre = meta.full_name || meta.name || myUser.email || "Tú";
+    el("acctName").textContent = nombre;
     var avatar = meta.avatar_url || meta.picture || "";
     if(avatar){ el("acctAvatar").src = avatar; acctBtn.innerHTML = '<img src="'+encodeURI(avatar)+'" alt="">'; }
+    // Que mis propios reportes muestren mi foto/nombre sin recargar.
+    perfilesCache[myUser.id] = { user_id:myUser.id, nombre:nombre, avatar_url:avatar };
     sb.from("perfiles").select("estrellas").eq("user_id", myUser.id).maybeSingle().then(function(p){
       el("acctStars").textContent = "⭐ "+((p.data&&p.data.estrellas)||0)+" estrellas";
     });
