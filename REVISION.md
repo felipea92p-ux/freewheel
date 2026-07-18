@@ -1,10 +1,10 @@
 # REVISIÓN FreeWheel — checklist para retomar
 
-> Última actualización: 2026-07-18 (tras desplegar linkIdentity + avatares en el mapa). Verificado contra el código real.
+> Última actualización: 2026-07-18 (tras desplegar linkIdentity, avatares, fix EXIF y compartir por WhatsApp). Verificado contra el código real.
 > Esfuerzo: **Rápido** (<1h) · **Medio** (~medio día) · **Grande** (1+ día). Orden por impacto dentro de cada sección.
 
 ## 📍 Estado actual (en vivo en freewheel-psi.vercel.app)
-- **Reportes** con foto (comprimida + Supabase Storage), tiempo real, apodo.
+- **Reportes** con foto (comprimida + Supabase Storage, **orientación EXIF corregida**), tiempo real, apodo. **Compartir cada punto por WhatsApp** (link `?r=<id>` que abre la app en ese pin).
 - **Ruta accesible** A→B (perfil silla de ruedas de OpenRouteService), elegir puntos por texto/autocompletado (todo Perú) o tocando el mapa, "usar mi ubicación".
 - **Cuentas — Fase 1 y Fase 2 EN VIVO:**
   - Identidad anónima silenciosa por dispositivo → **borrar/editar solo lo tuyo** (verificado por RLS en el servidor).
@@ -24,7 +24,7 @@
 
 2. **Aviso "Google no ha verificado esta app"** — *Rápido* · Al entrar con Google saldrá esa advertencia (app en modo testing). Solución: en Google Auth Platform → **Público** → agregar a Cayla/Carlos como **usuarios de prueba**, o **publicar la app** (los usuarios verían el aviso pero pueden continuar). Para el piloto, agregar test users es lo más limpio.
 
-3. **Probar el login real en celular** — crear reporte logueado, ver avatar, confirmar que editar/borrar sigue al usuario entre dispositivos.
+3. **Probar en celular real** — crear reporte logueado, ver tu avatar en el pin, confirmar que editar/borrar sigue al usuario; **subir una foto vertical y ver que NO sale girada**; tocar **"Compartir"** en un pin y confirmar que abre la hoja de WhatsApp, y que el link recibido abre la app en ese punto.
 
 ---
 
@@ -33,19 +33,16 @@
 1. **[MEDIO] La API key de OpenRouteService está expuesta en el código público** — *Medio* ·
    Cualquiera puede copiarla y gastar tu cuota (2000/día) o usarla. Mitigar: restringir la key por dominio en el panel de ORS, o proxy vía función serverless (Vercel) con la key en secreto.
 
-2. **[MEDIO] Las fotos de celular pueden salir giradas** — *Medio* ·
-   Al comprimir en `<canvas>` se pierde la orientación EXIF; fotos verticales se guardan de lado. Leer EXIF y rotar antes de subir.
-
-3. **[MEDIO] Sin escala: se cargan TODOS los reportes, un marcador por cada uno** — *Grande* ·
+2. **[MEDIO] Sin escala: se cargan TODOS los reportes, un marcador por cada uno** — *Grande* ·
    `loadReports()` hace `select("*")` sin límite y crea un pin por reporte. Con cientos, el mapa se pone lento en celular; con miles, se traba. (Ahora además trae los perfiles con `.in("user_id", …)`; con muchos autores la URL crece — otra razón para paginar/acotar al área visible.) Urgirá cuando la comunidad aporte de verdad.
 
-4. **[MEDIO] Moderación de contenido ajeno (spam/ofensas)** — *Grande* ·
-   Con login, ya hay identidad y admins (una vez configurados), pero falta el botón **"marcar como inapropiado"** y que cualquiera pueda insertar sin límite sigue abierto. Cuando el link circule, conviene rate-limit + reporte de contenido (parte de la Fase 3).
+3. **[MEDIO] Moderación de contenido ajeno (spam/ofensas)** — *Grande* ·
+   Con login, ya hay identidad y admins (una vez configurados), pero falta el botón **"marcar como inapropiado"** y que cualquiera pueda insertar sin límite sigue abierto. Cuando el link circule, conviene rate-limit + reporte de contenido (parte de la Fase 3). **Ahora es más urgente**: con "Compartir" los puntos se difunden por WhatsApp, así que llegará gente nueva antes.
 
-5. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
+4. **[BAJO] El modal (hoja de reporte) no atrapa el foco del teclado** — *Medio* ·
    Tabulando se puede salir a los controles del mapa detrás. Falta focus-trap (accesibilidad).
 
-6. **[BAJO] El panel de RUTA no se cierra al tocar fuera** — *Rápido* ·
+5. **[BAJO] El panel de RUTA no se cierra al tocar fuera** — *Rápido* ·
    El panel de cuenta ya cierra con clic afuera (hecho). Falta el de ruta, pero es más delicado por su modo "elegir punto en el mapa" (no debe cerrarse al tocar el mapa para picar); dejarlo para cuando se pueda probar bien.
 
 ---
@@ -70,7 +67,7 @@
 
 4. **"Ya está arreglado"** — *Medio* · Marcar un punto como resuelto (las barreras cambian) mantiene el mapa vivo.
 
-5. **Compartir un reporte o una ruta por link/WhatsApp** — *Rápido/Medio* · Difunde la app sola; súper natural en Perú.
+5. **Compartir una RUTA por link/WhatsApp** — *Medio* · Compartir un *punto* ya está hecho (botón "Compartir" en cada pin → `?r=<id>`). Falta compartir una ruta A→B armada (codificar origen+destino en la URL y rearmarla al abrir).
 
 6. **"Cerca de mí": lista de puntos accesibles/bloqueados alrededor** — *Medio* · A veces solo quieres saber "¿qué hay difícil cerca?" antes de salir.
 
@@ -92,6 +89,8 @@ La búsqueda funciona en todo Perú, pero la marca, el mapa inicial y los report
 ## ✅ Resuelto el 2026-07-18
 - **[bug ALTO] Entrar con Google ahora conserva los reportes anónimos** — `linkIdentity` vincula Google a la cuenta anónima (mismo uid), con fallback seguro a `signInWithOAuth` en otro dispositivo. **Falta el toggle "Allow manual linking" en Supabase** (pendiente #0) para que surta efecto pleno.
 - **[bug MEDIO] Avatares y nombre de perfil en los pines** — al cargar reportes se traen los perfiles por `user_id` y se pintan (foto + nombre de Google) en el popup; sin perfil, cae al apodo. El perfil propio se cachea al loguearse.
+- **[bug MEDIO] Fotos de celular ya no salen giradas** — `createImageBitmap` con `imageOrientation:"from-image"` hornea la orientación EXIF antes de comprimir; fallback a `<img>` en navegadores viejos.
+- **[difusión] Compartir un punto por WhatsApp** — botón "Compartir" en cada pin; `navigator.share` (hoja del sistema) o `wa.me`/copiar link; el link `?r=<id>` abre la app volando a ese punto. Verificado en la página en vivo (parse de `?r=` y armado del link/texto); falta confirmar visualmente en celular que el popup abre solo.
 - **Todo lo local quedó desplegado** en freewheel-psi.vercel.app.
 
 ## ✅ Resuelto el 2026-07-17
