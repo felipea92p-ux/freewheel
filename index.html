@@ -344,7 +344,9 @@
       user_id: u.id,
       nombre: meta.full_name || meta.name || null,
       avatar_url: meta.avatar_url || meta.picture || null
-    }, {onConflict:"user_id"}).then(function(){}, function(){});
+    }, {onConflict:"user_id"}).then(function(){}, function(err){
+      console.warn("Perfil no guardado:", err && err.message);
+    });
   }
 
   // Trujillo es el ancla del mapa y el centro de referencia de la búsqueda
