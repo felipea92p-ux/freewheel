@@ -160,6 +160,9 @@
   .pop .by{color:var(--muted);font-size:12px;margin:2px 0 6px}
   .pop .popimg{display:block;max-width:100%;max-height:160px;border-radius:10px;margin:4px 0}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
+  .pop .popacts{display:flex;gap:16px;margin-top:2px}
+  .pop .edit{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;
+    font-family:inherit;font-size:13.5px;padding:0}
   .pop .del{background:none;border:none;color:var(--red);font-weight:700;cursor:pointer;
     font-family:inherit;font-size:13.5px;padding:0}
 
@@ -325,6 +328,7 @@
       photoPreview=el("photoPreview"), photoImg=el("photoImg"), photoRemove=el("photoRemove"),
       nickInput=el("nick");
   var photoFile = null; // File elegido en el picker, pendiente de comprimir y subir al guardar
+  var editingId = null; // id del reporte que se está editando (null = reporte nuevo)
 
   // pintar chips de categoría
   CATS.forEach(function(c){
@@ -401,9 +405,12 @@
     photoBtn.style.display = "none";
     photoPreview.style.display = "inline-block";
   });
-  photoRemove.addEventListener("click", resetPhoto);
+  photoRemove.addEventListener("click", function(){ resetPhoto(); if(editingId && draft) draft.foto_url=null; });
 
   function openSheet(){
+    editingId = null;
+    el("sheetTitle").textContent = "Nuevo reporte";
+    saveBtn.textContent = "Guardar reporte";
     // reset UI
     [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed","false");});
     [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed","false");});
@@ -412,7 +419,21 @@
     backdrop.classList.add("show"); sheet.classList.add("show");
     setTimeout(function(){ (catsBox.querySelector(".cat")||sheet).focus(); },260);
   }
-  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); el("fab").focus(); }
+  // Abrir la hoja para EDITAR un reporte existente (propio), pre-llenada con sus datos.
+  function openEditSheet(r){
+    editingId = r.id;
+    draft = {lng:r.lng, lat:r.lat, cat:r.cat, sev:r.sev, sevTouched:true, foto_url:r.foto_url||null};
+    el("sheetTitle").textContent = "Editar reporte";
+    saveBtn.textContent = "Guardar cambios";
+    [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed", ch.dataset.cat===r.cat?"true":"false");});
+    [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed", b.dataset.sev===r.sev?"true":"false");});
+    note.value = r.note||""; resetPhoto();
+    nickInput.value = r.reportero || localStorage.getItem("freewheel_nickname") || "";
+    if(r.foto_url){ photoImg.src = r.foto_url; photoBtn.style.display="none"; photoPreview.style.display="inline-block"; }
+    refreshSave();
+    backdrop.classList.add("show"); sheet.classList.add("show");
+  }
+  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); el("fab").focus(); editingId=null; }
   el("cancelSheet").addEventListener("click",closeSheet);
   backdrop.addEventListener("click",closeSheet);
   document.addEventListener("keydown",function(e){ if(e.key==="Escape"){closeSheet();stopPicking();} });
@@ -460,32 +481,43 @@
   }
 
   saveBtn.addEventListener("click",function(){
+    var editing = editingId;
     saveBtn.disabled = true;
-    sessionReady.then(uploadPhotoIfAny).then(function(fotoUrl){
+    sessionReady.then(uploadPhotoIfAny).then(function(nuevaFoto){
+      // Si eligió foto nueva, se usa; si edita y no la tocó, conserva la existente.
+      var fotoUrl = photoFile ? nuevaFoto : (editing ? (draft.foto_url||null) : null);
       // No mandamos user_id: la base lo llena sola con la sesión actual (default auth.uid()).
-      // Así funciona igual antes y después del esquema, sin orden frágil.
       var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
                       lng:draft.lng, lat:draft.lat, reportero:getNickname(), foto_url:fotoUrl};
-      return sb.from("reportes").insert(payload).select();
+      return editing
+        ? sb.from("reportes").update(payload).eq("id", editing).select()
+        : sb.from("reportes").insert(payload).select();
     }).then(function(res){
       saveBtn.disabled = false;
       if(res.error || !res.data || !res.data[0]){
-        console.error(res.error); toast("No se pudo guardar — revisa tu conexión");
+        console.error(res.error); toast(editing?"No se pudo editar — ¿es tuyo?":"No se pudo guardar — revisa tu conexión");
         return;
       }
       var row = res.data[0];
       var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
                note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
                user_id:row.user_id, ts:row.creado_en};
-      addReportIfNew(r); closeSheet(); updateCount();
-      toast("Reporte guardado ✓");
+      if(editing){
+        reports = reports.map(function(x){ return x.id===r.id ? r : x; });
+        var mk=markers.filter(function(x){return x.id===r.id;})[0];
+        if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==r.id;}); }
+        addMarker(r); closeSheet(); toast("Reporte actualizado ✓");
+      } else {
+        addReportIfNew(r); closeSheet(); updateCount(); toast("Reporte guardado ✓");
+      }
     }).catch(function(err){
       saveBtn.disabled = false;
-      console.error(err); toast("No se pudo subir la foto — revisa tu conexión");
+      console.error(err); toast("No se pudo guardar — revisa tu conexión");
     });
   });
 
   // ---- marcadores ----
+  function esMio(r){ return !!(myUid && r.user_id && r.user_id===myUid); }
   function addReportIfNew(r){
     if(reports.some(function(x){return x.id===r.id;})) return false;
     reports.push(r); addMarker(r); return true;
@@ -496,20 +528,31 @@
     d.className="pin "+r.sev; d.innerHTML="<span>"+c.em+"</span>";
     d.setAttribute("role","button");
     d.setAttribute("aria-label",c.label+", "+SEVLABEL[r.sev]);
+    var acciones = esMio(r)
+      ? '<div class="popacts"><button class="edit" data-id="'+r.id+'">Editar</button>'
+        +'<button class="del" data-id="'+r.id+'">Eliminar</button></div>'
+      : '';
     var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
       '<div class="pop"><b>'+c.label+'</b><br>'+
       '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVLABEL[r.sev]+'</span>'+
       '<div class="by">Reportado por '+escapeHtml(r.reportero||"alguien")+(r.ts?' · '+timeAgo(r.ts):'')+'</div>'+
       (r.foto_url?'<a href="'+encodeURI(r.foto_url)+'" target="_blank" rel="noopener"><img class="popimg" src="'+encodeURI(r.foto_url)+'" alt="Foto del reporte (toca para ampliar)"></a>':'')+
       (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
-      '<button class="del" data-id="'+r.id+'">Eliminar reporte</button></div>'
+      acciones+'</div>'
     );
     var m=new maplibregl.Marker({element:d,anchor:"bottom"})
       .setLngLat([r.lng,r.lat]).setPopup(popup).addTo(map);
     markers.push({id:r.id,marker:m});
   }
   document.addEventListener("click",function(e){
-    if(e.target && e.target.classList.contains("del")){
+    if(!e.target) return;
+    if(e.target.classList.contains("edit")){
+      var eid=Number(e.target.dataset.id);
+      var rep=reports.filter(function(x){return x.id===eid;})[0];
+      if(rep){ [].forEach.call(document.querySelectorAll(".maplibregl-popup"),function(p){p.remove();}); openEditSheet(rep); }
+      return;
+    }
+    if(e.target.classList.contains("del")){
       var id=Number(e.target.dataset.id);
       var confirmado;
       try{ confirmado = window.confirm("¿Eliminar este reporte?"); }
@@ -517,7 +560,7 @@
       if(!confirmado) return;
       sb.from("reportes").delete().eq("id", id).select().then(function(res){
         if(res.error || !res.data || res.data.length===0){
-          console.error(res.error); toast("No se pudo eliminar todavía");
+          console.error(res.error); toast("No se pudo eliminar — ¿es tuyo?");
           return;
         }
         reports=reports.filter(function(x){return x.id!==id;});
@@ -796,7 +839,8 @@
   });
 
   map.on("load", function(){
-    loadReports().then(subscribeRealtime);
+    // Esperar la identidad antes de pintar reportes, para saber cuáles son tuyos (botones editar/eliminar).
+    sessionReady.then(loadReports).then(subscribeRealtime);
     map.addSource("route", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
     map.addLayer({
       id:"route-line", type:"line", source:"route",
