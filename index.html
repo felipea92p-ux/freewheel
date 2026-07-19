@@ -159,7 +159,18 @@
     min-height:42px;padding:0 16px;font-size:13.5px;font-weight:700;white-space:nowrap;
     display:flex;align-items:center;gap:6px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit}
   .fabtramo{background:var(--accent)}
+  .fabrec{background:var(--accent)}
+  .fabrec[aria-pressed="true"]{background:var(--red)}
   .fabquick:active{transform:scale(.97)}
+  /* ---- Barra de grabación de recorrido ---- */
+  .recbar{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:7;
+    background:var(--ink);color:#fff;padding:9px 10px 9px 16px;border-radius:999px;font-size:14px;
+    font-weight:600;box-shadow:var(--shadow);display:none;align-items:center;gap:12px;max-width:92vw}
+  .recbar.show{display:flex}
+  .recdot{width:11px;height:11px;border-radius:50%;background:var(--red);flex-shrink:0;animation:recpulse 1.2s infinite}
+  @keyframes recpulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .recbar #recStop{background:#fff;color:var(--ink);border:none;border-radius:999px;
+    padding:6px 14px;font-weight:800;cursor:pointer;font-family:inherit}
 
   /* ---- Placing banner ---- */
   .placing{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:6;
@@ -325,9 +336,16 @@
   <button id="cancelPlace" aria-label="Cancelar">✕</button>
 </div>
 
+<div class="recbar" id="recbar" role="status" aria-live="polite">
+  <span class="recdot" aria-hidden="true"></span>
+  <span id="recStatus">Grabando recorrido…</span>
+  <button id="recStop" type="button">Detener</button>
+</div>
+
 <div class="fabrow">
   <button class="fabquick" id="fabQuick" type="button" aria-label="Marcar un punto bloqueado con un toque">🔴 Bloqueado aquí</button>
   <button class="fabquick fabtramo" id="fabTramo" type="button" aria-label="Marcar un tramo (una calle o cuadra)">📏 Marcar tramo</button>
+  <button class="fabquick fabrec" id="fabRec" type="button" aria-pressed="false" aria-label="Grabar mi recorrido para validarlo como accesible">⏺ Grabar recorrido</button>
 </div>
 <button class="fab" id="fab"><span class="plus">＋</span> Reportar aquí</button>
 
@@ -542,6 +560,85 @@
     stopPicking(); openSheet();
   }
   el("tramoDone").addEventListener("click", finishTramo);
+
+  // ---- Grabar recorrido (GPS en primer plano): el camino que Carlos hace = tramo accesible ----
+  var recording=false, recWatchId=null, recTimer=null, recPts=[], recWakeLock=null,
+      recLastMoveTs=0, recStopNudged=false;
+  var fabRec=el("fabRec");
+  // Distancia aprox. en metros entre dos [lng,lat] (equirectangular, sirve a escala de ciudad).
+  function distMeters(a,b){
+    var R=6371000, toRad=Math.PI/180;
+    var x=(b[0]-a[0])*toRad*Math.cos(((a[1]+b[1])/2)*toRad);
+    var y=(b[1]-a[1])*toRad;
+    return Math.sqrt(x*x+y*y)*R;
+  }
+  function requestWakeLock(){
+    try{ if(navigator.wakeLock && navigator.wakeLock.request){
+      navigator.wakeLock.request("screen").then(function(wl){ recWakeLock=wl; }, function(){});
+    }}catch(e){}
+  }
+  function releaseWakeLock(){ try{ if(recWakeLock){ recWakeLock.release(); recWakeLock=null; } }catch(e){} }
+  function updateRecStatus(){
+    var m=0; for(var i=1;i<recPts.length;i++) m+=distMeters(recPts[i-1],recPts[i]);
+    el("recStatus").textContent = "Grabando… "+(m<1000 ? Math.round(m)+" m" : (m/1000).toFixed(2)+" km");
+  }
+  function onRecPos(pos){
+    var c=pos.coords;
+    if(c.accuracy && c.accuracy>60) return;          // punto muy impreciso: lo ignoramos
+    var p=[c.longitude, c.latitude];
+    var last=recPts[recPts.length-1];
+    if(last){
+      var d=distMeters(last,p);
+      if(d<8) return;                                // casi en el mismo sitio: no agrega (reduce ruido)
+      if(d>15){ recLastMoveTs=Date.now(); recStopNudged=false; } // se movió: reinicia detección de parada
+    }
+    recPts.push(p);
+    if(recPts.length>=2) setDraftTramo(recPts);
+    updateRecStatus();
+  }
+  function onRecErr(err){
+    toast(err && err.code===1 ? "Necesito permiso de ubicación para grabar" : "No pude leer tu ubicación");
+    stopRecording(true);
+  }
+  function startRecording(){
+    if(recording) return;
+    if(!navigator.geolocation){ toast("Tu navegador no permite ubicación en vivo"); return; }
+    recPts=[]; recStopNudged=false; recLastMoveTs=Date.now(); clearDraftTramo();
+    recWatchId=navigator.geolocation.watchPosition(onRecPos, onRecErr,
+      {enableHighAccuracy:true, maximumAge:2000, timeout:20000});
+    recording=true;
+    el("recbar").classList.add("show"); el("recStatus").textContent="Grabando… 0 m";
+    fabRec.setAttribute("aria-pressed","true");
+    requestWakeLock();
+    // Aviso suave si lleva rato detenido (¿alguna barrera lo detuvo?). Una sola vez por parada.
+    recTimer=setInterval(function(){
+      if(recording && Date.now()-recLastMoveTs>75000 && !recStopNudged){
+        recStopNudged=true;
+        toast("¿Te detuviste? Si algo te lo impide, toca 🔴 Bloqueado aquí");
+      }
+    }, 15000);
+  }
+  function stopRecording(cancel){
+    if(!recording) return;
+    recording=false;
+    if(recWatchId!=null){ navigator.geolocation.clearWatch(recWatchId); recWatchId=null; }
+    if(recTimer){ clearInterval(recTimer); recTimer=null; }
+    releaseWakeLock();
+    el("recbar").classList.remove("show"); fabRec.setAttribute("aria-pressed","false");
+    if(cancel || recPts.length<2){
+      if(!cancel) toast("No se registró recorrido suficiente");
+      recPts=[]; clearDraftTramo(); return;
+    }
+    // El recorrido se convierte en un tramo para revisar y guardar (hoja pre-elegida en verde).
+    draft={lng:recPts[0][0], lat:recPts[0][1], cat:null, sev:null, sevTouched:false, tramo:recPts.slice()};
+    setDraftTramo(draft.tramo); openSheet();
+  }
+  fabRec.addEventListener("click", startRecording);
+  el("recStop").addEventListener("click", function(){ stopRecording(false); });
+  // La pantalla se apaga → el bloqueo de pantalla se libera; al volver, lo pedimos de nuevo.
+  document.addEventListener("visibilitychange", function(){
+    if(recording && document.visibilityState==="visible") requestWakeLock();
+  });
   function stopPicking(){
     pickMode=null;
     pickFrom.setAttribute("aria-pressed","false"); pickTo.setAttribute("aria-pressed","false");
