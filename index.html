@@ -153,11 +153,13 @@
     font-family:inherit}
   .fab:active{transform:translateX(-50%) scale(.97)}
   .fab .plus{font-size:22px;line-height:1;margin-top:-1px}
-  .fabquick{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:6;
-    background:var(--red);color:#fff;border:none;border-radius:999px;
-    min-height:42px;padding:0 18px;font-size:14px;font-weight:700;
-    display:flex;align-items:center;gap:8px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit}
-  .fabquick:active{transform:translateX(-50%) scale(.97)}
+  .fabrow{position:absolute;left:50%;bottom:88px;transform:translateX(-50%);z-index:6;
+    display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:96vw}
+  .fabquick{background:var(--red);color:#fff;border:none;border-radius:999px;
+    min-height:42px;padding:0 16px;font-size:13.5px;font-weight:700;white-space:nowrap;
+    display:flex;align-items:center;gap:6px;box-shadow:var(--shadow);cursor:pointer;font-family:inherit}
+  .fabtramo{background:var(--accent)}
+  .fabquick:active{transform:scale(.97)}
 
   /* ---- Placing banner ---- */
   .placing{position:absolute;top:60px;left:50%;transform:translateX(-50%);z-index:6;
@@ -320,7 +322,10 @@
   <button id="cancelPlace" aria-label="Cancelar">✕</button>
 </div>
 
-<button class="fabquick" id="fabQuick" type="button" aria-label="Marcar un punto bloqueado con un toque">🔴 Bloqueado aquí</button>
+<div class="fabrow">
+  <button class="fabquick" id="fabQuick" type="button" aria-label="Marcar un punto bloqueado con un toque">🔴 Bloqueado aquí</button>
+  <button class="fabquick fabtramo" id="fabTramo" type="button" aria-label="Marcar un tramo (una calle o cuadra)">📏 Marcar tramo</button>
+</div>
 <button class="fab" id="fab"><span class="plus">＋</span> Reportar aquí</button>
 
 <div class="backdrop" id="backdrop"></div>
@@ -459,8 +464,9 @@
   // ---- estado ----
   var reports = [];
   var markers = [];
-  var pickMode = null; // null | "report" | "from" | "to"
-  var draft = null; // {lng,lat,cat,sev}
+  var pickMode = null; // null | "report" | "quick" | "tramo" | "from" | "to"
+  var draft = null; // {lng,lat,cat,sev,tramo}
+  var tramoPts = []; // puntos [lng,lat] mientras se dibuja un tramo
   var routePicked = {from:null, to:null}; // [lng,lat] cuando se eligió tocando el mapa
   var perfilesCache = {};                 // {user_id: {nombre, avatar_url}} de quienes reportaron
 
@@ -507,13 +513,19 @@
   // ---- flujo de colocar (reporte nuevo, o punto de ruta) ----
   el("fab").addEventListener("click",function(){ startPicking("report"); });
   el("fabQuick").addEventListener("click",function(){ startPicking("quick"); });
-  el("cancelPlace").addEventListener("click",stopPicking);
+  el("fabTramo").addEventListener("click",function(){ startPicking("tramo"); });
+  el("cancelPlace").addEventListener("click",function(){ tramoPts=[]; clearDraftTramo(); stopPicking(); });
+  var PLACING_TEXT = {
+    quick: "Toca dónde está bloqueado 🔴",
+    tramo: "Toca el inicio del tramo"
+  };
   function startPicking(mode){
     pickMode=mode;
-    if(mode==="report") draft={lng:null,lat:null,cat:null,sev:null,sevTouched:false};
+    if(mode==="report") draft={lng:null,lat:null,cat:null,sev:null,sevTouched:false,tramo:null};
+    if(mode==="tramo"){ draft={lng:null,lat:null,cat:null,sev:null,sevTouched:false,tramo:null}; tramoPts=[]; clearDraftTramo(); }
     if(mode==="from") pickFrom.setAttribute("aria-pressed","true");
     if(mode==="to") pickTo.setAttribute("aria-pressed","true");
-    el("placingText").textContent = (mode==="quick") ? "Toca dónde está bloqueado 🔴" : "Toca en el mapa el lugar exacto";
+    el("placingText").textContent = PLACING_TEXT[mode] || "Toca en el mapa el lugar exacto";
     placingBar.classList.add("show"); crosshair.classList.add("show");
     map.getCanvas().style.cursor="crosshair";
   }
@@ -531,6 +543,16 @@
       stopPicking(); openSheet();
     } else if(pickMode==="quick"){
       stopPicking(); quickSave(lng, lat);
+    } else if(pickMode==="tramo"){
+      tramoPts.push([lng,lat]);
+      if(tramoPts.length===1){
+        el("placingText").textContent = "Toca el final del tramo";
+      } else {
+        // Dos puntos: cerramos el tramo (línea recta) y abrimos la hoja para su gravedad/detalle.
+        draft.tramo = tramoPts.slice(); draft.lng=tramoPts[0][0]; draft.lat=tramoPts[0][1];
+        setDraftTramo(draft.tramo);
+        stopPicking(); openSheet();
+      }
     } else {
       var which=pickMode;
       routePicked[which]=[lng,lat];
@@ -556,8 +578,9 @@
 
   function openSheet(){
     editingId = null;
-    el("sheetTitle").textContent = "Nuevo reporte";
-    saveBtn.textContent = "Guardar reporte";
+    var esTramo = draft && draft.tramo && draft.tramo.length>=2;
+    el("sheetTitle").textContent = esTramo ? "Nuevo tramo" : "Nuevo reporte";
+    saveBtn.textContent = esTramo ? "Guardar tramo" : "Guardar reporte";
     // reset UI
     [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed","false");});
     [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed","false");});
@@ -569,8 +592,8 @@
   // Abrir la hoja para EDITAR un reporte existente (propio), pre-llenada con sus datos.
   function openEditSheet(r){
     editingId = r.id;
-    draft = {lng:r.lng, lat:r.lat, cat:r.cat, sev:r.sev, sevTouched:true, foto_url:r.foto_url||null};
-    el("sheetTitle").textContent = "Editar reporte";
+    draft = {lng:r.lng, lat:r.lat, cat:r.cat, sev:r.sev, sevTouched:true, foto_url:r.foto_url||null, tramo:r.tramo||null};
+    el("sheetTitle").textContent = r.tramo ? "Editar tramo" : "Editar reporte";
     saveBtn.textContent = "Guardar cambios";
     [].forEach.call(catsBox.children,function(ch){ch.setAttribute("aria-pressed", ch.dataset.cat===r.cat?"true":"false");});
     [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed", b.dataset.sev===r.sev?"true":"false");});
@@ -580,7 +603,7 @@
     refreshSave();
     backdrop.classList.add("show"); sheet.classList.add("show");
   }
-  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); el("fab").focus(); editingId=null; }
+  function closeSheet(){ sheet.classList.remove("show"); backdrop.classList.remove("show"); el("fab").focus(); editingId=null; tramoPts=[]; clearDraftTramo(); }
   el("cancelSheet").addEventListener("click",closeSheet);
   backdrop.addEventListener("click",closeSheet);
   document.addEventListener("keydown",function(e){ if(e.key==="Escape"){closeSheet();stopPicking();} });
@@ -654,6 +677,9 @@
       // No mandamos user_id: la base lo llena sola con la sesión actual (default auth.uid()).
       var payload = {categoria:draft.cat, severidad:draft.sev, nota:note.value.trim(),
                       lng:draft.lng, lat:draft.lat, reportero:getNickname(), foto_url:fotoUrl};
+      // Solo mandamos 'tramo' cuando de verdad es un tramo: así los reportes normales
+      // siguen funcionando aunque la columna 'tramo' todavía no exista en la base.
+      if(draft.tramo) payload.tramo = draft.tramo;
       return editing
         ? sb.from("reportes").update(payload).eq("id", editing).select()
         : sb.from("reportes").insert(payload).select();
@@ -663,17 +689,14 @@
         console.error(res.error); toast(editing?"No se pudo editar — ¿es tuyo?":"No se pudo guardar — revisa tu conexión");
         return;
       }
-      var row = res.data[0];
-      var r = {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
-               user_id:row.user_id, ts:row.creado_en};
+      var r = rowToReport(res.data[0]);
       if(editing){
         reports = reports.map(function(x){ return x.id===r.id ? r : x; });
         var mk=markers.filter(function(x){return x.id===r.id;})[0];
         if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==r.id;}); }
-        addMarker(r); closeSheet(); toast("Reporte actualizado ✓");
+        addMarker(r); closeSheet(); rebuildTramos(); toast(r.tramo?"Tramo actualizado ✓":"Reporte actualizado ✓");
       } else {
-        addReportIfNew(r); closeSheet(); updateCount(); toast("Reporte guardado ✓");
+        addReportIfNew(r); closeSheet(); updateCount(); rebuildTramos(); toast(r.tramo?"Tramo guardado ✓":"Reporte guardado ✓");
       }
     }).catch(function(err){
       saveBtn.disabled = false;
@@ -685,7 +708,25 @@
   function rowToReport(row){
     return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
             note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
-            user_id:row.user_id, ts:row.creado_en};
+            user_id:row.user_id, ts:row.creado_en, tramo:row.tramo||null};
+  }
+  // ---- tramos (líneas): redibuja todas las líneas reportadas, del color de su gravedad ----
+  function rebuildTramos(){
+    if(!map.getSource("tramos")) return;
+    var feats = reports.filter(function(r){ return r.tramo && r.tramo.length>=2; }).map(function(r){
+      return {type:"Feature", properties:{sev:r.sev}, geometry:{type:"LineString", coordinates:r.tramo}};
+    });
+    map.getSource("tramos").setData({type:"FeatureCollection", features:feats});
+  }
+  // Vista previa del tramo que se está dibujando (antes de guardarlo).
+  function setDraftTramo(coords){
+    if(!map.getSource("tramo-draft")) return;
+    map.getSource("tramo-draft").setData({type:"FeatureCollection",
+      features:[{type:"Feature", properties:{}, geometry:{type:"LineString", coordinates:coords}}]});
+  }
+  function clearDraftTramo(){
+    if(!map.getSource("tramo-draft")) return;
+    map.getSource("tramo-draft").setData({type:"FeatureCollection", features:[]});
   }
   // Reporte rápido: un toque marca un punto BLOQUEADO (obstáculo) sin abrir el formulario.
   // El detalle (categoría exacta, foto, nota) se agrega luego tocando el pin → Editar.
@@ -785,7 +826,7 @@
         reports=reports.filter(function(x){return x.id!==id;});
         var mk=markers.filter(function(x){return x.id===id;})[0];
         if(mk){mk.marker.remove(); markers=markers.filter(function(x){return x.id!==id;});}
-        updateCount(); toast("Reporte eliminado");
+        updateCount(); rebuildTramos(); toast("Reporte eliminado");
       });
     }
   });
@@ -831,11 +872,7 @@
   function loadReports(){
     return sb.from("reportes").select("*").order("creado_en",{ascending:true}).then(function(res){
       if(res.error){ console.error(res.error); toast("No se pudo cargar reportes"); return; }
-      reports = res.data.map(function(row){
-        return {id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-                note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
-                user_id:row.user_id, ts:row.creado_en};
-      });
+      reports = res.data.map(rowToReport);
       // Traer los perfiles (nombre/avatar) de quienes reportaron, para pintarlos en los pines.
       var ids = {}; reports.forEach(function(r){ if(r.user_id) ids[r.user_id]=1; });
       var idList = Object.keys(ids);
@@ -846,6 +883,7 @@
         : Promise.resolve();
       return perfiles.then(function(){
         reports.forEach(addMarker);
+        rebuildTramos();
         updateCount();
       });
     });
@@ -889,32 +927,27 @@
     sb.channel("reportes-changes")
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"reportes"},function(payload){
         var row=payload.new;
-        var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
-               user_id:row.user_id, ts:row.creado_en};
+        var r=rowToReport(row);
         if(!addReportIfNew(r)) return;
-        updateCount();
+        updateCount(); rebuildTramos();
         toast("Nuevo reporte de "+(row.reportero||"alguien"));
       })
       .on("postgres_changes",{event:"UPDATE",schema:"public",table:"reportes"},function(payload){
-        var row=payload.new;
-        var r={id:row.id, lng:row.lng, lat:row.lat, cat:row.categoria, sev:row.severidad,
-               note:row.nota||"", reportero:row.reportero, foto_url:row.foto_url,
-               user_id:row.user_id, ts:row.creado_en};
+        var r=rowToReport(payload.new);
         var idx=-1;
         for(var i=0;i<reports.length;i++){ if(reports[i].id===r.id){ idx=i; break; } }
-        if(idx===-1){ if(addReportIfNew(r)) updateCount(); return; } // no lo teníamos: agrégalo
+        if(idx===-1){ if(addReportIfNew(r)){ updateCount(); rebuildTramos(); } return; } // no lo teníamos: agrégalo
         reports[idx]=r;                                              // reemplaza con los datos nuevos
         var mk=markers.filter(function(x){return x.id===r.id;})[0]; // y repinta su marcador
         if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==r.id;}); }
-        addMarker(r);
+        addMarker(r); rebuildTramos();
       })
       .on("postgres_changes",{event:"DELETE",schema:"public",table:"reportes"},function(payload){
         var id=payload.old.id;
         reports=reports.filter(function(x){return x.id!==id;});
         var mk=markers.filter(function(x){return x.id===id;})[0];
         if(mk){ mk.marker.remove(); markers=markers.filter(function(x){return x.id!==id;}); }
-        updateCount();
+        updateCount(); rebuildTramos();
       })
       .subscribe();
   }
@@ -1220,6 +1253,22 @@
       id:"route-line", type:"line", source:"route",
       layout:{"line-join":"round","line-cap":"round"},
       paint:{"line-color":"#5D57C4","line-width":5,"line-opacity":0.85}
+    });
+    // Tramos reportados: líneas del color de su gravedad (verde/ámbar/rojo = accesibilidad real).
+    map.addSource("tramos", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
+    map.addLayer({
+      id:"tramos-line", type:"line", source:"tramos",
+      layout:{"line-join":"round","line-cap":"round"},
+      paint:{"line-width":6,"line-opacity":0.85,
+        "line-color":["match",["get","sev"],
+          "green",SEVHEX.green,"amber",SEVHEX.amber,"red",SEVHEX.red,"#888"]}
+    });
+    // Vista previa (punteada) del tramo que se está dibujando, antes de guardarlo.
+    map.addSource("tramo-draft", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
+    map.addLayer({
+      id:"tramo-draft-line", type:"line", source:"tramo-draft",
+      layout:{"line-join":"round","line-cap":"round"},
+      paint:{"line-color":"#5D57C4","line-width":5,"line-opacity":0.6,"line-dasharray":[2,1.5]}
     });
   });
 })();
