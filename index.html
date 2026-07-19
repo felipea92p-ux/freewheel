@@ -168,6 +168,8 @@
   .placing.show{display:flex}
   .placing button{background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;
     width:30px;height:30px;font-size:16px;cursor:pointer;font-family:inherit}
+  .placing #tramoDone{width:auto;height:30px;padding:0 14px;background:#fff;color:var(--accent);font-weight:800}
+  .placing #tramoDone:disabled{opacity:.5;cursor:default}
   .crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:3;
     font-size:34px;color:var(--accent);text-shadow:0 0 4px #fff,0 0 4px #fff;display:none;
     pointer-events:none}
@@ -319,6 +321,7 @@
 <div class="crosshair" id="crosshair" aria-hidden="true">✛</div>
 <div class="placing" id="placing" role="status">
   <span id="placingText">Toca en el mapa el lugar exacto</span>
+  <button id="tramoDone" type="button" style="display:none">Listo</button>
   <button id="cancelPlace" aria-label="Cancelar">✕</button>
 </div>
 
@@ -517,7 +520,7 @@
   el("cancelPlace").addEventListener("click",function(){ tramoPts=[]; clearDraftTramo(); stopPicking(); });
   var PLACING_TEXT = {
     quick: "Toca dónde está bloqueado 🔴",
-    tramo: "Toca el inicio del tramo"
+    tramo: "Toca la primera esquina del tramo"
   };
   function startPicking(mode){
     pickMode=mode;
@@ -526,13 +529,24 @@
     if(mode==="from") pickFrom.setAttribute("aria-pressed","true");
     if(mode==="to") pickTo.setAttribute("aria-pressed","true");
     el("placingText").textContent = PLACING_TEXT[mode] || "Toca en el mapa el lugar exacto";
+    el("tramoDone").style.display = (mode==="tramo") ? "inline-block" : "none";
+    el("tramoDone").disabled = true;
     placingBar.classList.add("show"); crosshair.classList.add("show");
     map.getCanvas().style.cursor="crosshair";
   }
+  // Cerrar un tramo multipunto: pasa a la hoja para elegir gravedad y guardar.
+  function finishTramo(){
+    if(tramoPts.length<2) return;
+    draft.tramo = tramoPts.slice(); draft.lng=tramoPts[0][0]; draft.lat=tramoPts[0][1];
+    setDraftTramo(draft.tramo);
+    stopPicking(); openSheet();
+  }
+  el("tramoDone").addEventListener("click", finishTramo);
   function stopPicking(){
     pickMode=null;
     pickFrom.setAttribute("aria-pressed","false"); pickTo.setAttribute("aria-pressed","false");
     placingBar.classList.remove("show"); crosshair.classList.remove("show");
+    el("tramoDone").style.display="none";
     map.getCanvas().style.cursor="";
   }
   map.on("click",function(e){
@@ -545,14 +559,10 @@
       stopPicking(); quickSave(lng, lat);
     } else if(pickMode==="tramo"){
       tramoPts.push([lng,lat]);
-      if(tramoPts.length===1){
-        el("placingText").textContent = "Toca el final del tramo";
-      } else {
-        // Dos puntos: cerramos el tramo (línea recta) y abrimos la hoja para su gravedad/detalle.
-        draft.tramo = tramoPts.slice(); draft.lng=tramoPts[0][0]; draft.lat=tramoPts[0][1];
-        setDraftTramo(draft.tramo);
-        stopPicking(); openSheet();
-      }
+      if(tramoPts.length>=2){ setDraftTramo(tramoPts); el("tramoDone").disabled=false; }
+      el("placingText").textContent = (tramoPts.length<2)
+        ? "Toca la siguiente esquina"
+        : "Toca más esquinas · o 'Listo' para terminar";
     } else {
       var which=pickMode;
       routePicked[which]=[lng,lat];
@@ -586,6 +596,8 @@
     [].forEach.call(document.querySelectorAll(".sevbtn"),function(b){b.setAttribute("aria-pressed","false");});
     note.value=""; saveBtn.disabled=true; resetPhoto();
     nickInput.value = localStorage.getItem("freewheel_nickname") || "";
+    // Un tramo suele validar una calle ACCESIBLE: lo dejamos pre-elegido en verde (editable).
+    if(esTramo){ selectCat("accesible"); }
     backdrop.classList.add("show"); sheet.classList.add("show");
     setTimeout(function(){ (catsBox.querySelector(".cat")||sheet).focus(); },260);
   }
