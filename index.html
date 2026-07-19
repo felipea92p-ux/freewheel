@@ -1287,7 +1287,10 @@
     return fetch("https://api.openrouteservice.org/v2/directions/wheelchair/geojson", {
       method:"POST",
       headers:{"Authorization":ORS_API_KEY, "Content-Type":"application/json"},
-      body: JSON.stringify({coordinates:[coordA, coordB]})
+      // Pedimos hasta 3 caminos. Ojo: TODOS son accesibles (perfil silla de ruedas);
+      // se diferencian por largo/forma, no por accesibilidad — por eso se pintan neutros.
+      body: JSON.stringify({coordinates:[coordA, coordB],
+        alternative_routes:{target_count:3, weight_factor:1.6, share_factor:0.6}})
     }).then(function(r){
       if(!r.ok){
         return r.json().then(function(err){
@@ -1312,10 +1315,28 @@
     routeMarkers.push(new maplibregl.Marker({element:d}).setLngLat(coord).addTo(map));
   }
 
+  // Rutas devueltas por ORS: la activa se pinta índigo, las alternativas en gris neutro
+  // (todas son accesibles; solo cambian largo/forma — el color no juzga accesibilidad).
+  var routeFeats=[], routeActiveIdx=0, routeBaseWarn="";
+  function renderRoutes(){
+    var src = map.getSource("route"); if(!src) return;
+    routeFeats.forEach(function(f,i){ f.properties.active = (i===routeActiveIdx); f.properties.idx = i; });
+    src.setData({type:"FeatureCollection", features:routeFeats});
+  }
+  function routeSummaryMsg(){
+    var f = routeFeats[routeActiveIdx]; if(!f) return "";
+    var s = f.properties.summary;
+    var km = (s.distance/1000).toFixed(1), min = Math.round(s.duration/60);
+    var msg = "≈ "+km+" km · "+min+" min por ruta accesible";
+    var alts = routeFeats.length-1;
+    if(alts>0) msg += " · +"+alts+(alts===1?" camino alternativo":" caminos alternativos")+" en gris — toca uno para elegirlo";
+    return msg + routeBaseWarn;
+  }
   function clearRoute(){
     routeFrom.value=""; routeTo.value=""; routeInfo.textContent=""; routeInfo.className="routeinfo";
     routePicked.from=null; routePicked.to=null; acFromCtl.close(); acToCtl.close();
     routeMarkers.forEach(function(m){ m.remove(); }); routeMarkers=[];
+    routeFeats=[]; routeActiveIdx=0; routeBaseWarn="";
     var src = map.getSource("route");
     if(src) src.setData({type:"FeatureCollection", features:[]});
   }
@@ -1333,24 +1354,22 @@
       return fetchRoute(geos[0].coords, geos[1].coords).then(function(geo){ return {geos:geos, geo:geo}; });
     }).then(function(res){
       routeGo.disabled = false;
-      var feature = res.geo.features && res.geo.features[0];
-      if(!feature) throw new Error("No se encontró una ruta accesible entre esos puntos.");
-      map.getSource("route").setData(res.geo);
+      if(!res.geo.features || !res.geo.features.length) throw new Error("No se encontró una ruta accesible entre esos puntos.");
+      routeFeats = res.geo.features; routeActiveIdx = 0;
+      renderRoutes();
       routeMarkers.forEach(function(m){ m.remove(); }); routeMarkers=[];
       addRouteMarker(res.geos[0].coords, "#1F9D57");
       addRouteMarker(res.geos[1].coords, "#D23B3B");
       var bounds = res.geo.bbox;
       if(bounds) map.fitBounds([[bounds[0],bounds[1]],[bounds[2],bounds[3]]], {padding:60});
-      var s = feature.properties.summary;
-      var km = (s.distance/1000).toFixed(1), min = Math.round(s.duration/60);
-      var msg = "≈ "+km+" km · "+min+" min por ruta accesible";
       var origenAprox = res.geos[0].approx, destinoAprox = res.geos[1].approx;
+      routeBaseWarn = "";
       if(origenAprox || destinoAprox){
         var cual = origenAprox && destinoAprox ? "origen ni el destino" : origenAprox ? "origen" : "destino";
-        msg += ". Aviso: no encontramos la dirección exacta de "+cual+" — el punto usado es aproximado. "
+        routeBaseWarn = ". Aviso: no encontramos la dirección exacta de "+cual+" — el punto usado es aproximado. "
           +"Prueba con un lugar conocido (centro comercial, universidad, hospital, plaza).";
       }
-      routeInfo.textContent = msg;
+      routeInfo.textContent = routeSummaryMsg();
     }).catch(function(err){
       routeGo.disabled = false;
       routeInfo.className="routeinfo error";
@@ -1366,11 +1385,29 @@
       openSharedReport();   // si vino ?r=<id>, volar a ese punto y abrir su popup
     });
     map.addSource("route", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
+    // Alternativas: gris NEUTRO a propósito — no usamos verde/ámbar/rojo porque esos
+    // colores significan accesibilidad, y las alternativas solo cambian en largo/forma.
+    map.addLayer({
+      id:"route-alt-line", type:"line", source:"route",
+      filter:["!=", ["get","active"], true],
+      layout:{"line-join":"round","line-cap":"round"},
+      paint:{"line-color":"#8A93A6","line-width":4,"line-opacity":0.6,"line-dasharray":[1.2,1.2]}
+    });
     map.addLayer({
       id:"route-line", type:"line", source:"route",
+      filter:["==", ["get","active"], true],
       layout:{"line-join":"round","line-cap":"round"},
       paint:{"line-color":"#5D57C4","line-width":5,"line-opacity":0.85}
     });
+    // Tocar una alternativa gris la vuelve la ruta principal.
+    map.on("click", "route-alt-line", function(e){
+      if(pickMode || !e.features || !e.features[0]) return;
+      routeActiveIdx = e.features[0].properties.idx;
+      renderRoutes();
+      routeInfo.textContent = routeSummaryMsg();
+    });
+    map.on("mouseenter", "route-alt-line", function(){ if(!pickMode) map.getCanvas().style.cursor="pointer"; });
+    map.on("mouseleave", "route-alt-line", function(){ if(!pickMode) map.getCanvas().style.cursor=""; });
     // Tramos reportados: líneas del color de su gravedad (verde/ámbar/rojo = accesibilidad real).
     map.addSource("tramos", {type:"geojson", data:{type:"FeatureCollection", features:[]}});
     map.addLayer({
