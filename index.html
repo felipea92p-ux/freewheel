@@ -256,6 +256,16 @@
   .pop .by .byavatar{width:20px;height:20px;border-radius:50%;object-fit:cover;flex-shrink:0}
   .pop .popimg{display:block;max-width:100%;max-height:160px;border-radius:10px;margin:4px 0}
   .pop .note{color:var(--muted);font-size:13.5px;margin:6px 0 10px;white-space:pre-wrap}
+  /* ¿Sigue así? — frescura + confirmación */
+  .pop .fresh{font-size:12.5px;color:var(--muted);margin:2px 0 8px}
+  .pop .chgnote{font-size:12.5px;color:var(--amber);font-weight:600;margin:0 0 8px}
+  .pop .confacts{display:flex;gap:8px;margin:0 0 12px}
+  .pop .conf-si,.pop .conf-no{flex:1;border-radius:10px;padding:8px 6px;font-family:inherit;
+    font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid var(--hair);background:var(--surface)}
+  .pop .conf-si{color:var(--green);border-color:var(--green)}
+  .pop .conf-no{color:var(--muted)}
+  .pop .conf-si:active,.pop .conf-no:active{transform:scale(.97)}
+  .pop .confdone{font-size:12.5px;color:var(--green);font-weight:700;margin:0 0 12px}
   .pop .popacts{display:flex;gap:16px;margin-top:2px;align-items:center}
   .pop .share{background:none;border:none;color:var(--accent);font-weight:700;cursor:pointer;
     font-family:inherit;font-size:13.5px;padding:0;margin-right:auto}
@@ -502,6 +512,7 @@
   var tramoPts = []; // puntos [lng,lat] mientras se dibuja un tramo
   var routePicked = {from:null, to:null}; // [lng,lat] cuando se eligió tocando el mapa
   var perfilesCache = {};                 // {user_id: {nombre, avatar_url}} de quienes reportaron
+  var confirmCache = {};                  // {reporte_id: {si, no, ultima, mine}} — "¿sigue así?"
 
   var el = function(id){return document.getElementById(id);};
   var sheet=el("sheet"), backdrop=el("backdrop"), catsBox=el("cats"),
@@ -892,29 +903,69 @@
       +'<i class="sevmark '+r.sev+'" aria-hidden="true">'+SEVSYM[r.sev]+'</i>';
     d.setAttribute("role","button");
     d.setAttribute("aria-label",c.label+", "+SEVLABEL[r.sev]);
-    var acciones = '<div class="popacts">'
-      + '<button class="share" data-id="'+r.id+'">↗ Compartir</button>'
-      + (esMio(r)
-          ? '<button class="edit" data-id="'+r.id+'">Editar</button>'
-            +'<button class="del" data-id="'+r.id+'">Eliminar</button>'
-          : '')
-      + '</div>';
-    var info = reporterInfo(r);
-    var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(
-      '<div class="pop"><b>'+c.label+'</b><br>'+
-      '<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVSYM[r.sev]+' '+SEVLABEL[r.sev]+'</span>'+
-      '<div class="by">'+(info.avatar?'<img class="byavatar" src="'+encodeURI(info.avatar)+'" alt="">':'')
-        +'Reportado por '+escapeHtml(info.nombre)+(r.ts?' · '+timeAgo(r.ts):'')+'</div>'+
-      (r.foto_url?'<a href="'+encodeURI(r.foto_url)+'" target="_blank" rel="noopener"><img class="popimg" src="'+encodeURI(r.foto_url)+'" alt="Foto del reporte (toca para ampliar)"></a>':'')+
-      (r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')+
-      acciones+'</div>'
-    );
+    var popup=new maplibregl.Popup({offset:24,closeButton:false}).setHTML(popupHTML(r));
     var m=new maplibregl.Marker({element:d,anchor:"bottom"})
       .setLngLat([r.lng,r.lat]).setPopup(popup).addTo(map);
     // MapLibre pone "Map marker" por defecto; lo reemplazamos con algo útil para lector de pantalla.
     d.setAttribute("aria-label", c.label+" · "+SEVLABEL[r.sev]+(r.note?" · "+r.note:""));
     markers.push({id:r.id,marker:m});
   }
+  // HTML del popup de un reporte (separado para poder re-pintarlo tras confirmar).
+  function popupHTML(r){
+    var c=CATS.filter(function(x){return x.id===r.cat;})[0]||{em:"📍",label:"Reporte"};
+    var info=reporterInfo(r);
+    var acciones='<div class="popacts">'
+      +'<button class="share" data-id="'+r.id+'">↗ Compartir</button>'
+      +(esMio(r)?'<button class="edit" data-id="'+r.id+'">Editar</button>'
+                +'<button class="del" data-id="'+r.id+'">Eliminar</button>':'')
+      +'</div>';
+    var cc=confirmCache[r.id]||{si:0,no:0,ultima:null,mine:null};
+    var fresh=cc.si>0
+      ? '✓ Confirmado por '+cc.si+(cc.si===1?' persona':' personas')+(cc.ultima?' · '+timeAgo(cc.ultima):'')
+      : 'Aún sin confirmar';
+    var cambio=cc.no>0 ? '<div class="chgnote">⚠ '+cc.no+(cc.no===1?' dice':' dicen')+' que ya cambió</div>' : '';
+    var confbtns=cc.mine
+      ? '<div class="confdone">'+(cc.mine==="si"?"Confirmaste que sigue ✓":"Marcaste que ya cambió ✕")+'</div>'
+      : '<div class="confacts"><button class="conf-si" data-id="'+r.id+'">Sigue así ✓</button>'
+        +'<button class="conf-no" data-id="'+r.id+'">Ya cambió ✕</button></div>';
+    return '<div class="pop"><b>'+c.label+'</b><br>'
+      +'<span class="sev-tag" style="background:'+SEVHEX[r.sev]+';color:'+SEVTEXT[r.sev]+'">'+SEVSYM[r.sev]+' '+SEVLABEL[r.sev]+'</span>'
+      +'<div class="by">'+(info.avatar?'<img class="byavatar" src="'+encodeURI(info.avatar)+'" alt="">':'')
+        +'Reportado por '+escapeHtml(info.nombre)+(r.ts?' · '+timeAgo(r.ts):'')+'</div>'
+      +(r.foto_url?'<a href="'+encodeURI(r.foto_url)+'" target="_blank" rel="noopener"><img class="popimg" src="'+encodeURI(r.foto_url)+'" alt="Foto del reporte (toca para ampliar)"></a>':'')
+      +(r.note?'<div class="note">“'+escapeHtml(r.note)+'”</div>':'<div class="note"></div>')
+      +'<div class="fresh">'+fresh+'</div>'+cambio+confbtns
+      +acciones+'</div>';
+  }
+  // Guarda "¿sigue así?": una respuesta por persona (upsert), refresca la frescura del punto.
+  function confirmarReporte(id, sigue){
+    sessionReady.then(function(){
+      if(!myUid){ return {error:{message:"sin sesión"}}; }
+      return sb.from("confirmaciones").upsert(
+        {reporte_id:id, user_id:myUid, sigue:sigue, creado_en:new Date().toISOString()},
+        {onConflict:"reporte_id,user_id"}
+      ).select();
+    }).then(function(res){
+      if(res && res.error){
+        console.error(res.error);
+        var m=(res.error.message||"");
+        toast(m.indexOf("does not exist")!==-1
+          ? "La app necesita una actualización de base (avisa a Cayla)"
+          : "No se pudo confirmar — revisa tu conexión");
+        return;
+      }
+      var cc=confirmCache[id]||{si:0,no:0,ultima:null,mine:null};
+      if(cc.mine==="si"){ cc.si=Math.max(0,cc.si-1); }   // deshacer voto previo si cambió de opinión
+      if(cc.mine==="no"){ cc.no=Math.max(0,cc.no-1); }
+      if(sigue){ cc.si++; cc.mine="si"; cc.ultima=new Date().toISOString(); } else { cc.no++; cc.mine="no"; }
+      confirmCache[id]=cc;
+      var mk=markers.filter(function(x){return x.id===id;})[0];
+      var rep=reports.filter(function(x){return x.id===id;})[0];
+      if(mk && rep && mk.marker.getPopup()){ mk.marker.getPopup().setHTML(popupHTML(rep)); }
+      toast(sigue?"¡Gracias! Confirmado ✓":"Gracias — lo marcamos como cambiado");
+    }).catch(function(err){ console.error(err); toast("No se pudo confirmar — revisa tu conexión"); });
+  }
+
   // Compartir un punto por WhatsApp / hoja de compartir del sistema, con link que abre ese punto.
   function shareReport(rep){
     if(!rep) return;
@@ -937,6 +988,10 @@
     if(e.target.classList.contains("share")){
       var sid=Number(e.target.dataset.id);
       shareReport(reports.filter(function(x){return x.id===sid;})[0]);
+      return;
+    }
+    if(e.target.classList.contains("conf-si") || e.target.classList.contains("conf-no")){
+      confirmarReporte(Number(e.target.dataset.id), e.target.classList.contains("conf-si"));
       return;
     }
     if(e.target.classList.contains("edit")){
@@ -1014,7 +1069,18 @@
             (pr.data||[]).forEach(function(p){ perfilesCache[p.user_id]=p; });
           }, function(){ /* si falla, se muestran los apodos */ })
         : Promise.resolve();
-      return perfiles.then(function(){
+      // Confirmaciones ("¿sigue así?"): conteos + última confirmación + si yo ya respondí.
+      var confs = sb.from("confirmaciones").select("reporte_id,user_id,sigue,creado_en").then(function(cr){
+        confirmCache = {};
+        (cr.data||[]).forEach(function(x){
+          var cc=confirmCache[x.reporte_id]||{si:0,no:0,ultima:null,mine:null};
+          if(x.sigue){ cc.si++; if(!cc.ultima || x.creado_en>cc.ultima) cc.ultima=x.creado_en; }
+          else { cc.no++; }
+          if(myUid && x.user_id===myUid){ cc.mine = x.sigue?"si":"no"; }
+          confirmCache[x.reporte_id]=cc;
+        });
+      }, function(){ /* la tabla aún no existe: los botones aparecen igual, sin conteos */ });
+      return Promise.all([perfiles, confs]).then(function(){
         reports.forEach(addMarker);
         rebuildTramos();
         updateCount();
